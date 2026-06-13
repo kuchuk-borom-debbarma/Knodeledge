@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 import java.util.Map;
 
 @Service
-public class AINoteProcessor {
+public class NoteProcessor {
 
     @Autowired
     private Tracer tracer;

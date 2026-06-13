@@ -5,9 +5,9 @@ import org.springframework.stereotype.Service;
 import java.util.ArrayList;
 
 /**
- * Abstracts away the flow of the whole AI workflow.
+ * Abstracts away the flow of the whole AIService workflow.
  */
 @Service
-public interface AI {
+public interface AIService {
     void startIngestingRawNotes(ArrayList<String> notes);
 }

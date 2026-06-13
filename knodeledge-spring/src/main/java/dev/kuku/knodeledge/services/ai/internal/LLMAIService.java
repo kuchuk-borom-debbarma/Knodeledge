@@ -1,6 +1,6 @@
 package dev.kuku.knodeledge.services.ai.internal;
 
-import dev.kuku.knodeledge.services.ai.AI;
+import dev.kuku.knodeledge.services.ai.AIService;
 import dev.kuku.topotracer.spring.Traced;
 import dev.kuku.topotracer.sdk.TopoNodeType;
 import dev.kuku.topotracer.sdk.Tracer;
@@ -12,13 +12,13 @@ import java.util.ArrayList;
 import java.util.Map;
 
 /**
- * LLM focused AI work-flow
+ * LLM focused AIService work-flow
  */
 @Service
-public class AILLMImpl implements AI {
+public class LLMAIService implements AIService {
 
     @Autowired
-    private AINoteProcessor noteProcessor;
+    private NoteProcessor noteProcessor;
 
     @Autowired
     private NoteRepository noteRepository;

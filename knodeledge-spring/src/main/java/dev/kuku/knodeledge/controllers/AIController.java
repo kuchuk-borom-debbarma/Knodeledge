@@ -1,7 +1,7 @@
 package dev.kuku.knodeledge.controllers;
 
 import dev.kuku.knodeledge.models.IngestBody;
-import dev.kuku.knodeledge.services.ai.AI;
+import dev.kuku.knodeledge.services.ai.AIService;
 import dev.kuku.topotracer.spring.Traced;
 import dev.kuku.topotracer.sdk.TopoNodeType;
 import dev.kuku.topotracer.sdk.Tracer;
@@ -12,19 +12,19 @@ import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
 @RestController
-@RequestMapping("api/v1/ai")
+@RequestMapping("api/v1/aiService")
 @RequiredArgsConstructor
 @Slf4j
 public class AIController {
-    final AI ai;
+    final AIService aiService;
     final Tracer tracer;
 
     @GetMapping("/")
-    @Traced(value = "ai-controller.ingest-notes", type = TopoNodeType.CONTROLLER)
+    @Traced(value = "aiService-controller.ingest-notes", type = TopoNodeType.CONTROLLER)
     public ResponseEntity<String> ingestNotes(@RequestBody IngestBody body) {
         log.info("ingestNotes endpoint hit: {}", body);
         tracer.log("ingestNotes endpoint hit", Map.of("notesCount", String.valueOf(body.notes().size())));
-        ai.startIngestingRawNotes(body.notes());
+        aiService.startIngestingRawNotes(body.notes());
         return ResponseEntity.ok("Success");
     }
 }
