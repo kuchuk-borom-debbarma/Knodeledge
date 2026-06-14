@@ -4,6 +4,7 @@ import dev.kuku.topotracer.sdk.Span;
 import dev.kuku.topotracer.sdk.TraceContext;
 import dev.kuku.topotracer.sdk.TraceOptions;
 import dev.kuku.topotracer.sdk.Tracer;
+import dev.kuku.topotracer.spring.TraceArgumentFormatter;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 import java.util.Arrays;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 
@@ -45,6 +47,15 @@ public class KnodeledgeTracingAspect {
             .map(Class::getSimpleName)
             .collect(Collectors.joining(", "));
         String autoName = className + "." + methodName + "(" + paramTypes + ")";
+        TraceArgumentFormatter.FormattedArguments formattedArguments = null;
+        if (traced.includeArguments()) {
+            formattedArguments = TraceArgumentFormatter.format(
+                method,
+                joinPoint.getArgs(),
+                Set.of(traced.redactArguments()),
+                traced.maxArgumentLength());
+            autoName = formattedArguments.signature();
+        }
 
         // Map the custom enum level to KnodeledgeImportance
         KnodeledgeImportanceLevel typeEnum = traced.type();
@@ -54,6 +65,9 @@ public class KnodeledgeTracingAspect {
             .nodeType(typeEnum != null ? typeEnum.name().toLowerCase() : "method")
             .name(autoName)
             .importance(importance);
+        if (formattedArguments != null) {
+            options.data(formattedArguments.attributes());
+        }
 
         Span span = tracer.startNode(spanName, options);
         Span parent = TraceContext.getActive();

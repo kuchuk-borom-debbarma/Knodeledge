@@ -22,4 +22,10 @@ public @interface Traced {
      * The custom importance level for the traced method.
      */
     KnodeledgeImportanceLevel type() default KnodeledgeImportanceLevel.METHOD;
+
+    boolean includeArguments() default false;
+
+    int maxArgumentLength() default 128;
+
+    String[] redactArguments() default {};
 }

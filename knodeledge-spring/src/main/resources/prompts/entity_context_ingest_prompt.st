@@ -107,48 +107,64 @@ RULE 7 — CONFIDENCE SCORING
   LOW    — inferred with uncertainty
 
 RULE 8 — IMPLIED INSTANCE LINKING
-When the note implies that a specific entity X is an instance of a general concept Y
-(e.g. "plays Rainbow Six Siege game" implies R6S is a game):
-  a) Add the general concept to X's categories: rainbow_six_siege.categories includes "game"
-  b) If Y already exists as a node in the Existing Graph, add a STATE edge:
-     rainbow_six_siege --SUBCATEGORY_OF--> game  (confidence: MEDIUM)
-  c) This makes X reachable via graph traversal of Y — critical for chatbot queries like
-     "what games does the actor play?" finding specific game titles.
+When the note implies that a specific entity X is a specialisation/instance of a general
+concept Y, create a SUBCATEGORY_OF edge from X to Y. This applies to ALL domains:
+
+  Object categorisation:
+    "plays Rainbow Six Siege game"   → rainbow_six_siege --SUBCATEGORY_OF--> game
+    "watches anime like Attack on Titan" → attack_on_titan --SUBCATEGORY_OF--> anime
+
+  Professional skill hierarchy:
+    "is a programmer, likes game development" → game_development --SUBCATEGORY_OF--> programmer
+    "is a chef, specialises in sushi"         → sushi --SUBCATEGORY_OF--> cuisine
+
+  Academic field hierarchy:
+    "studies CS, interested in machine learning" → machine_learning --SUBCATEGORY_OF--> computer_science
+
+Steps:
+  a) Add Y's category to X's categories array.
+  b) Add SUBCATEGORY_OF (STATE, confidence: MEDIUM) from X to Y.
+  c) This applies whether Y pre-exists in the Existing Graph OR is new in the same batch.
+     Do NOT skip the edge just because Y is also being created in the same extraction.
+
+This makes X reachable via graph traversal of Y — essential for chatbot queries like
+"what games does the actor play?" or "what does the actor programme?".
 
 ---
 
 EXAMPLES:
 
-## Example 1 — PLAYS vs LIKES vs CREATES, entity deduplication, and implied instance linking
+## Example 1 — PLAYS vs CREATES, same-batch SUBCATEGORY_OF (both nodes new)
 
 Context Boundary Subject: leo
-Existing Graph:
-  nodes: [{id: "leo", ...}, {id: "game", label: "Gaming", categories: ["hobby", "entertainment"], ...}]
-  edges: [{source: "leo", target: "game", predicate: "LIKES", conditions: []}]
+Existing Graph: (empty)
 New Note:
 leo plays guitar.
 leo creates music occasionally.
+leo enjoys gaming.
 leo plays Counter-Strike, which is a shooter game.
 
 {
   "nodes": [
-    {"id": "leo",           "label": "leo",           "categories": ["person"],                           "description": "Subject of this context",                            "confidence": "HIGH"},
-    {"id": "guitar",        "label": "Guitar",        "categories": ["instrument", "music"],             "description": "String musical instrument",                          "confidence": "HIGH"},
-    {"id": "music",         "label": "Music",         "categories": ["art", "creative"],                 "description": "Creative audio art form",                            "confidence": "HIGH"},
-    {"id": "counter_strike","label": "Counter-Strike","categories": ["game", "fps", "shooter"],         "description": "First-person shooter game by Valve",                  "confidence": "HIGH"}
+    {"id": "leo",           "label": "leo",           "categories": ["person"],                "description": "Subject of this context",          "confidence": "HIGH"},
+    {"id": "guitar",        "label": "Guitar",        "categories": ["instrument", "music"],   "description": "String musical instrument",         "confidence": "HIGH"},
+    {"id": "music",         "label": "Music",         "categories": ["art", "creative"],       "description": "Creative audio art form",            "confidence": "HIGH"},
+    {"id": "game",          "label": "Gaming",        "categories": ["hobby", "entertainment"],"description": "Video gaming as a hobby",           "confidence": "HIGH"},
+    {"id": "counter_strike","label": "Counter-Strike","categories": ["game", "fps"],          "description": "First-person shooter game by Valve","confidence": "HIGH"}
   ],
   "edges": [
-    {"source": "leo",           "target": "guitar",        "predicate": "PLAYS",         "taxonomyType": "EVENT",  "confidence": "HIGH",   "context": "leo plays guitar",                              "conditions": []},
-    {"source": "leo",           "target": "music",         "predicate": "CREATES",       "taxonomyType": "EVENT",  "confidence": "HIGH",   "context": "leo creates music occasionally",                  "conditions": []},
-    {"source": "leo",           "target": "counter_strike","predicate": "PLAYS",         "taxonomyType": "EVENT",  "confidence": "HIGH",   "context": "leo plays Counter-Strike, which is a shooter game","conditions": []},
-    {"source": "counter_strike","target": "game",          "predicate": "SUBCATEGORY_OF","taxonomyType": "STATE",  "confidence": "MEDIUM", "context": "Counter-Strike is a shooter game",               "conditions": []}
+    {"source": "leo",           "target": "guitar",        "predicate": "PLAYS",         "taxonomyType": "EVENT",      "confidence": "HIGH",   "context": "leo plays guitar",                               "conditions": []},
+    {"source": "leo",           "target": "music",         "predicate": "CREATES",       "taxonomyType": "EVENT",      "confidence": "HIGH",   "context": "leo creates music occasionally",                  "conditions": []},
+    {"source": "leo",           "target": "game",          "predicate": "LIKES",         "taxonomyType": "PREFERENCE", "confidence": "HIGH",   "context": "leo enjoys gaming",                              "conditions": []},
+    {"source": "leo",           "target": "counter_strike","predicate": "PLAYS",         "taxonomyType": "EVENT",      "confidence": "HIGH",   "context": "leo plays Counter-Strike, which is a shooter game","conditions": []},
+    {"source": "counter_strike","target": "game",          "predicate": "SUBCATEGORY_OF","taxonomyType": "STATE",      "confidence": "MEDIUM", "context": "Counter-Strike is a shooter game",               "conditions": []}
   ]
 }
 
-Note: "game" already existed in the graph so counter_strike gets a SUBCATEGORY_OF edge linking
-it into the game node — making it reachable when querying "what games does leo play?".
-Also: "creates music" → CREATES (EVENT), NOT INTERESTED_IN or LIKES.
-"plays guitar" → PLAYS (EVENT), NOT LIKES.
+Note: Both "game" and "counter_strike" are NEW in this batch (Existing Graph is empty).
+SUBCATEGORY_OF is still created because Rule 8 applies to same-batch nodes too.
+This is the critical case — do NOT skip SUBCATEGORY_OF just because Y is also new.
+"creates music" → CREATES (EVENT), not INTERESTED_IN. "plays guitar" → PLAYS, not LIKES.
 
 ---
 

@@ -59,7 +59,11 @@ public class LLMAIService implements AIService {
     /**
      * Phase 1:- Feed the entire context + existing graph(s) + note.
      */
-    @Traced(value = "ai.ingest-note", type = KnodeledgeImportanceLevel.SERVICE)
+    @Traced(
+        value = "ai.ingest-note",
+        type = KnodeledgeImportanceLevel.SERVICE,
+        includeArguments = true,
+        maxArgumentLength = 160)
     @Override
     public void ingestNote(String note, String contextBoundaryId, String actorId) {
         tracer.log("IngestNote " + note + " within " + contextBoundaryId + " for " + actorId);
