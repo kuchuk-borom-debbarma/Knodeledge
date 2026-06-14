@@ -1,5 +1,6 @@
 package dev.kuku.knodeledge.services.ai;
 
+import dev.kuku.knodeledge.services.ai.dto.Kgraph;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -9,5 +10,6 @@ import java.util.ArrayList;
  */
 @Service
 public interface AIService {
-    void generateLocalGraphFromNotes(ArrayList<String> notes);
+    Kgraph generateLocalGraphFromNotes(ArrayList<String> notes);
+    void ingestNote(String note);
 }

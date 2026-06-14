@@ -1,7 +1,9 @@
 package dev.kuku.knodeledge.controllers;
 
+import dev.kuku.knodeledge.infra.KnodeledgeImportance;
 import dev.kuku.knodeledge.models.IngestBody;
 import dev.kuku.knodeledge.services.ai.AIService;
+import dev.kuku.knodeledge.services.ai.dto.Kgraph;
 import dev.kuku.topotracer.spring.Traced;
 import dev.kuku.topotracer.sdk.TopoNodeType;
 import dev.kuku.topotracer.sdk.Tracer;
@@ -22,10 +24,11 @@ public class AIController {
 
     @PostMapping("/")
     @Traced(value = "aiService-controller.ingest-notes", type = TopoNodeType.CONTROLLER)
-    public ResponseEntity<String> ingestNotes(@RequestBody IngestBody body) {
+    public ResponseEntity<Kgraph> ingestNotes(@RequestBody IngestBody body) {
         log.info("ingestNotes endpoint hit: {}", body);
-        tracer.log("ingestNotes endpoint hit", Map.of("notesCount", String.valueOf(body.notes().size())));
-        aiService.generateLocalGraphFromNotes(body.notes());
-        return ResponseEntity.ok("Success");
+        tracer.log("ingestNotes endpoint hit", Map.of("notesCount", String.valueOf(body.notes().size())), KnodeledgeImportance.CONTROLLER);
+        Kgraph graph = aiService.generateLocalGraphFromNotes(body.notes());
+        return ResponseEntity.ok(graph);
     }
 }
+

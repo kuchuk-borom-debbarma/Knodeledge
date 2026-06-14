@@ -1,4 +1,4 @@
-package dev.kuku.knodeledge.services.ai.dto;
+package dev.kuku.knodeledge.services.ai.internal.models;
 
 import java.util.List;
 
