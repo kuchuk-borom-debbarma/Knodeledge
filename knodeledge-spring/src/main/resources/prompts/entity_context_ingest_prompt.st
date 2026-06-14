@@ -37,6 +37,10 @@ The Context Boundary Name is the primary actor. Every extracted node MUST connec
 actor (directly or indirectly) via at least one edge. No isolated nodes allowed.
 If a classification fact is given ("Python is a language") without an explicit actor link,
 infer a reasonable edge (actor --INTERESTED_IN--> python, confidence: MEDIUM).
+Person-to-person relationships are valid: if the note mentions another person and their
+relationship to the actor, create a person node and a relationship edge.
+  "works with Sarah" → sarah (person node) + actor --WORKS_WITH--> sarah
+  "is friends with Tom" → tom (person node) + actor --FRIENDS_WITH--> tom
 
 RULE 2 — NO IS_A EDGES
 Never use IS_A as a predicate. Express type/category as the node's `categories` array.
@@ -53,23 +57,36 @@ CRITICAL: Morphological variants of the same concept MUST map to one ID.
   "anime shows", "anime" → use id "anime"
 Do NOT create two separate nodes that represent the same real-world concept.
 
+TEMPORAL STATES: If the note describes a past state ("used to", "previously", "formerly"),
+the predicate must reflect that it is no longer current. Use a past-form predicate to avoid
+overwriting a current state:
+  "used to live in London" → PREVIOUSLY_LIVED_IN  (not LIVES_IN)
+  "used to work at Google" → PREVIOUSLY_WORKED_AT (not WORKS_AT)
+  "formerly studied chemistry" → PREVIOUSLY_STUDIED (not STUDIES)
+This prevents a past state from falsely overwriting a current one in the graph.
+
 RULE 4 — RELATIONSHIP TAXONOMY
-Every edge is exactly one of:
-  EVENT      — something that happened or is actively done:
-               ATTENDED, WATCHED, VISITED, COMPLETED, WON
-               PLAYS     (actively plays a game or instrument: "plays guitar", "plays R6S")
-               CREATES   (produces creative output: "makes music", "writes novels", "draws art")
-               PRACTICES (a regular skill/discipline: "practices yoga", "practices coding")
-  PREFERENCE — attitudes and tastes:
-               LIKES, DISLIKES, FAVORITE, INTERESTED_IN, AVOIDS
-  STATE      — persistent attributes:
-               WORKS_AT, LIVES_IN, ALLERGIC_TO, SPEAKS, SPECIALIZES_IN, SUBCATEGORY_OF
+Every edge belongs to exactly one taxonomyType:
+  EVENT      — something that happened or is actively done
+  PREFERENCE — attitudes, tastes, and opinions
+  STATE      — persistent attributes and conditions
+
+The predicate is an UPPER_SNAKE_CASE verb that precisely describes the relationship.
+The lists below are COMMON EXAMPLES, NOT a closed vocabulary. If none fit, invent
+the most semantically accurate verb possible.
+
+  EVENT examples:  ATTENDED, WATCHED, VISITED, COMPLETED, WON, PLAYED, PLAYS,
+                   CREATES, PRACTICES, STUDIED_AT, WORKED_AT, COMPETED_IN
+  PREFERENCE examples: LIKES, DISLIKES, FAVORITE, INTERESTED_IN, AVOIDS
+  STATE examples:  WORKS_AT, LIVES_IN, ALLERGIC_TO, SPEAKS, SPECIALIZES_IN,
+                   SUBCATEGORY_OF, FRIENDS_WITH, MARRIED_TO, BORN_IN, PART_OF,
+                   PREVIOUSLY_LIVED_IN, PREVIOUSLY_WORKED_AT, SIBLING_OF
 
 Choose the most specific predicate. Common mistakes to avoid:
-  "makes music"        → CREATES (not INTERESTED_IN, not LIKES)
-  "plays guitar"       → PLAYS   (not LIKES)
-  "plays Rainbow Six"  → PLAYS   (not LIKES)
-  "enjoys hiking"      → LIKES   (no active skill implied, LIKES is correct here)
+  "makes music"       → CREATES      (not INTERESTED_IN, not LIKES)
+  "plays guitar"      → PLAYS        (not LIKES)
+  "used to live in X" → PREVIOUSLY_LIVED_IN  (not LIVES_IN — see Rule 3 temporal states)
+  "enjoys hiking"     → LIKES        (passive enjoyment, no active skill = LIKES is correct)
 
 RULE 5 — CONDITIONAL PREFERENCES (Hybrid Schema)
 When a preference is qualified by a condition ("likes X but not when it has Y"):
