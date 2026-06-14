@@ -6,6 +6,7 @@ import dev.kuku.knodeledge.services.context_boundary.dto.ContextBoundary;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -32,5 +33,17 @@ public class StubContextBoundaryService implements ContextBoundaryService {
             new Date(),
             userId
         );
+    }
+
+    @Override
+    public List<ContextBoundary> getContextBoundariesByUserId(String userId) {
+        return List.of(new ContextBoundary(
+            UUID.randomUUID().toString(),
+            "Stub Boundary Name",
+            "Stub Context Description",
+            new Date(),
+            new Date(),
+            userId
+        ));
     }
 }

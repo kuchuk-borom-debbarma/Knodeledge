@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
 
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -35,5 +36,10 @@ public class InMemoryContextBoundaryService implements ContextBoundaryService {
         return contextBoundaryRepository.findById(contextBoundaryId)
             .filter(cb -> cb.userId().equals(userId))
             .orElseThrow(() -> new IllegalArgumentException("Context boundary not found or access denied"));
+    }
+
+    @Override
+    public List<ContextBoundary> getContextBoundariesByUserId(String userId) {
+        return contextBoundaryRepository.findByUserId(userId);
     }
 }

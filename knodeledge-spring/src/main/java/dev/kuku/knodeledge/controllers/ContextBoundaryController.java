@@ -9,10 +9,9 @@ import dev.kuku.topotracer.sdk.Tracer;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/context-boundary")
@@ -23,12 +22,18 @@ public class ContextBoundaryController {
 
     @Traced(value = "ContextBoundary-controller.create-context-boundary", type = KnodeledgeImportanceLevel.CONTROLLER)
     @PostMapping("/")
-    ResponseEntity<ContextBoundary> createContextBoundary(String userId, @RequestBody CreateContextBoundaryBody body) {
+    ResponseEntity<ContextBoundary> createContextBoundary(@RequestParam String userId, @RequestBody CreateContextBoundaryBody body) {
         tracer.log("Creating context boundary for user " + userId + " - " + body);
         ContextBoundary contextBoundary = contextBoundaryService.createContextBoundary(body, userId);
         tracer.log("Created context boundary = " + contextBoundary);
         return ResponseEntity.ok(contextBoundary);
     }
+
+    @Traced(value = "ContextBoundary-controller.get-context-boundaries", type = KnodeledgeImportanceLevel.CONTROLLER)
+    @GetMapping("/user/{userId}")
+    ResponseEntity<List<ContextBoundary>> getContextBoundariesByUserId(@PathVariable String userId) {
+        tracer.log("Fetching context boundaries for user " + userId);
+        List<ContextBoundary> list = contextBoundaryService.getContextBoundariesByUserId(userId);
+        return ResponseEntity.ok(list);
+    }
 }
-
-
