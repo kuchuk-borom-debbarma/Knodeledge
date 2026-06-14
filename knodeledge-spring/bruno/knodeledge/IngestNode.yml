@@ -1,0 +1,24 @@
+info:
+  name: IngestNode
+  type: http
+  seq: 1
+
+http:
+  method: POST
+  url: http://localhost:8085/api/v1/aiService/
+  body:
+    type: json
+    data: |-
+      {
+        "notes": [
+          "I love to eat mango. Mango with a little salt tastes good.",
+          "Salt is an essential culinary ingredient."
+        ]
+      }
+  auth: inherit
+
+settings:
+  encodeUrl: true
+  timeout: 0
+  followRedirects: true
+  maxRedirects: 5

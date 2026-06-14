@@ -1,0 +1,10 @@
+### Ingest Raw Notes for Knowledge Graph Extraction
+POST http://localhost:8085/api/v1/aiService/
+Content-Type: application/json
+
+{
+  "notes": [
+    "I love to eat mango. Mango with a little salt tastes good.",
+    "Salt is an essential culinary ingredient."
+  ]
+}

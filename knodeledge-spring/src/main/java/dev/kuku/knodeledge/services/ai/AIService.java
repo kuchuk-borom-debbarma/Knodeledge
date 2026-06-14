@@ -9,5 +9,5 @@ import java.util.ArrayList;
  */
 @Service
 public interface AIService {
-    void startIngestingRawNotes(ArrayList<String> notes);
+    void generateLocalGraphFromNotes(ArrayList<String> notes);
 }

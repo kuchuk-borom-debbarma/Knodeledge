@@ -9,6 +9,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.Map;
 
 @RestController
@@ -19,12 +20,12 @@ public class AIController {
     final AIService aiService;
     final Tracer tracer;
 
-    @GetMapping("/")
+    @PostMapping("/")
     @Traced(value = "aiService-controller.ingest-notes", type = TopoNodeType.CONTROLLER)
     public ResponseEntity<String> ingestNotes(@RequestBody IngestBody body) {
         log.info("ingestNotes endpoint hit: {}", body);
         tracer.log("ingestNotes endpoint hit", Map.of("notesCount", String.valueOf(body.notes().size())));
-        aiService.startIngestingRawNotes(body.notes());
+        aiService.generateLocalGraphFromNotes(body.notes());
         return ResponseEntity.ok("Success");
     }
 }
