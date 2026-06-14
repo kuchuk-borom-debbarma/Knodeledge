@@ -9,8 +9,12 @@ import dev.kuku.topotracer.sdk.Tracer;
 import io.netty.util.internal.StringUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
 
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.IngestionResponse;
@@ -29,33 +33,19 @@ public class LLMAIService implements AIService {
     private final ContextBoundaryService contextBoundaryService;
     private final GraphService graphService;
 
-    private final String nodeEdgePrompt = """
-            You are a highly precise Knowledge Graph Extraction Engine. Your task is to analyze raw text notes, extract static concepts (entities), and map the relationships (edges) between them.
-            
-            Follow these strict rules:
-            1. ENTITY RESOLUTION & NORMALIZATION: Map synonyms and plurals to the same singular, lowercase ID (e.g. "mangoes" -> "mango").
-            2. RELATIONSHIP EXTRACTION: Format predicates in UPPER_SNAKE_CASE (e.g. IS_A, BETTER_WITH).
-            3. NOISE FILTERING: Ignore conversational or out-of-context statements.
-            4. CONTEXT ANCHORING: For every edge, populate the 'context' field with the exact sentence from the notes.
-            5. NO HANGING NODES: Every node in your output must be connected by at least one edge to another node.
-            """;
+    @Value("classpath:/prompts/node_edge_prompt.st")
+    private Resource nodeEdgePromptResource;
 
-    private final String ingestNotePrompt = """
-            You are a State-Aware Knowledge Graph Extraction Engine.
-            Your task is to analyze a new raw text note and extract new nodes (entities) and edges (relationships), aligning them with the existing knowledge graph in this context.
-            
-            Rules:
-            1. FUZZY SEMANTIC ALIGNING: Compare extracted entities with existing nodes in the provided graph. Reuse existing node IDs if they refer to the same entity (e.g., if the note says "Apple fruit" and "apple" exists, reuse ID "apple").
-            2. DEEP CATEGORIZATION & HIERARCHY: For every extracted entity (especially foods, ingredients, activities, colors, concepts, etc.), you MUST deeply infer its categories/parent concepts using "IS_A" relationship edges (e.g. "onion" -> IS_A -> "vegetable", "onion" -> IS_A -> "ingredient", "roses" -> IS_A -> "flower").
-            3. COMPOUND ENTITY DECOMPOSITION: If the note contains compound subjects (e.g., "dry fruit in ice cream" or "roses light colour"), break them down. Extract the base entities (e.g., "dry fruit", "ice cream", "roses", "light color") and relate them (e.g., "dry_fruit_in_ice_cream" -> CONTAINS -> "dry_fruit", "roses_light_color" -> HAS_COLOR -> "light_color"). Then extract categories for the base entities (e.g., "dry_fruit" -> IS_A -> "ingredient", "ice_cream" -> IS_A -> "food", "roses" -> IS_A -> "flower").
-            4. RELATIONSHIP TAXONOMY: Categorize every relationship (edge) into one of these types:
-               - EVENT: Transient or point-in-time actions (e.g., WENT_HIKING, BOUGHT_BOOTS).
-               - PREFERENCE: Likes, favorites, dislikes, or opinions that change over time (e.g., FAVORITE_FRUIT, LIKES, DISLIKES).
-               - STATE: Semi-permanent attributes or properties that assert truth values (e.g., IS_VEGETARIAN, ALLERGIC_TO).
-            5. CONFIDENCE SCORING: Assign a confidence level (HIGH, MEDIUM, LOW) to each extracted node and edge based on how clearly and directly it is stated in the note.
-            6. CONTEXT ANCHORING: Populate the 'context' field of every edge with the exact sentence from the note supporting that edge.
-            7. NO HANGING/ISOLATED NODES: Every node in your output MUST be connected by at least one edge to another node in the graph. Never extract a node without connecting it.
-            """;
+    @Value("classpath:/prompts/ingest_note_prompt.st")
+    private Resource ingestNotePromptResource;
+
+    private String getPrompt(Resource resource) {
+        try {
+            return resource.getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read prompt resource from classpath", e);
+        }
+    }
 
     /**
      * Phase 1:- Feed the entire context + existing graph(s) + note.
@@ -78,7 +68,7 @@ public class LLMAIService implements AIService {
 
         //Feed into LLM
         IngestionResponse response = chatClient.prompt()
-                .system(this.ingestNotePrompt)
+                .system(getPrompt(this.ingestNotePromptResource))
                 .user(String.format("""
                         Context Boundary:
                         Name: %s
