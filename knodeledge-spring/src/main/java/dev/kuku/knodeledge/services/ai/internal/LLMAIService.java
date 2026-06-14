@@ -1,13 +1,13 @@
 package dev.kuku.knodeledge.services.ai.internal;
 
-import dev.kuku.knodeledge.infra.KnodeledgeImportance;
+import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
+import dev.kuku.knodeledge.infra.Traced;
+
 import dev.kuku.knodeledge.services.ai.AIService;
 import dev.kuku.knodeledge.services.ai.dto.Kedge;
 import dev.kuku.knodeledge.services.ai.dto.Kgraph;
 import dev.kuku.knodeledge.services.ai.dto.Knode;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
-import dev.kuku.topotracer.spring.Traced;
-import dev.kuku.topotracer.sdk.TopoNodeType;
 import dev.kuku.topotracer.sdk.Tracer;
 import io.netty.util.internal.StringUtil;
 import org.springframework.ai.chat.client.ChatClient;
@@ -45,9 +45,9 @@ public class LLMAIService implements AIService {
      * 1. Generate Local Graph
      * 2.
      */
-    @Traced(value = "ai.process-notes", nodeType = "service")
+    @Traced(value = "ai.process-notes", type = KnodeledgeImportanceLevel.SERVICE)
     public Kgraph generateLocalGraphFromNotes(ArrayList<String> notes) {
-        tracer.log("LLM focused Local Graph Generator", KnodeledgeImportance.SERVICE);
+        tracer.log("LLM focused Local Graph Generator");
         if (notes == null || notes.isEmpty()) {
             return new Kgraph(List.of(), List.of());
         }
@@ -67,13 +67,13 @@ public class LLMAIService implements AIService {
         tracer.log("Successfully extracted knowledge graph", java.util.Map.of(
                 "nodesCount", String.valueOf(graph.nodes().size()),
                 "edgesCount", String.valueOf(graph.edges().size())
-        ), KnodeledgeImportance.SERVICE);
+        ));
 
         for (var node : graph.nodes()) {
-            tracer.log("Extracted Node: " + node.label() + " [" + node.category() + "]", KnodeledgeImportance.SERVICE);
+            tracer.log("Extracted Node: " + node.label() + " [" + node.category() + "]");
         }
         for (var edge : graph.edges()) {
-            tracer.log("Extracted Edge: " + edge.source() + " -" + edge.predicate() + "-> " + edge.target(), KnodeledgeImportance.SERVICE);
+            tracer.log("Extracted Edge: " + edge.source() + " -" + edge.predicate() + "-> " + edge.target());
         }
 
         List<Knode> kNodes = graph.nodes().stream()
@@ -86,12 +86,13 @@ public class LLMAIService implements AIService {
         return new Kgraph(kNodes, kEdges);
     }
 
-    @Traced(value = "ai.ingest-note", type = TopoNodeType.METHOD)
+    @Traced(value = "ai.ingest-note", type = KnodeledgeImportanceLevel.METHOD)
     @Override
     public void ingestNote(String note) {
         if (StringUtil.isNullOrEmpty(note)) {
-            tracer.log("Note is null or empty!", KnodeledgeImportance.METHOD);
+            tracer.log("Note is null or empty!");
         }
     }
 }
+
 

@@ -1,4 +1,4 @@
-package dev.kuku.knodeledge.infra;
+package dev.kuku.knodeledge.infra.topo_tracer;
 
 public enum KnodeledgeImportanceLevel {
     CONTROLLER,

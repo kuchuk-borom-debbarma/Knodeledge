@@ -3,10 +3,10 @@ package dev.kuku.knodeledge.controllers;
 import dev.kuku.knodeledge.models.CreateContextBoundaryBody;
 import dev.kuku.knodeledge.services.context_boundary.ContextBoundaryService;
 import dev.kuku.knodeledge.services.context_boundary.dto.ContextBoundary;
-import dev.kuku.knodeledge.infra.KnodeledgeImportance;
-import dev.kuku.topotracer.sdk.TopoNodeType;
+import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
+import dev.kuku.knodeledge.infra.Traced;
 import dev.kuku.topotracer.sdk.Tracer;
-import dev.kuku.topotracer.spring.Traced;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,13 +21,14 @@ public class ContextBoundaryController {
     private final Tracer tracer;
     private final ContextBoundaryService contextBoundaryService;
 
-    @Traced(value = "ContextBoundary-controller.create-context-boundary", type = TopoNodeType.CONTROLLER)
+    @Traced(value = "ContextBoundary-controller.create-context-boundary", type = KnodeledgeImportanceLevel.CONTROLLER)
     @PostMapping("/")
     ResponseEntity<ContextBoundary> createContextBoundary(String userId, @RequestBody CreateContextBoundaryBody body) {
-        tracer.log("Creating context boundary for user " + userId + " - " + body, KnodeledgeImportance.CONTROLLER);
+        tracer.log("Creating context boundary for user " + userId + " - " + body);
         ContextBoundary contextBoundary = contextBoundaryService.createContextBoundary(body, userId);
-        tracer.log("Created context boundary = " + contextBoundary, KnodeledgeImportance.CONTROLLER);
+        tracer.log("Created context boundary = " + contextBoundary);
         return ResponseEntity.ok(contextBoundary);
     }
 }
+
 
