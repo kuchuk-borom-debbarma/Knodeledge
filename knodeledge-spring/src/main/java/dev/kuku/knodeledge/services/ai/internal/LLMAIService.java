@@ -45,6 +45,9 @@ public class LLMAIService implements AIService {
     @Value("classpath:/prompts/entity_context_ingest_prompt.st")
     private Resource ingestNotePromptResource;
 
+    @Value("classpath:/prompts/entity_context_clean_prompt.st")
+    private Resource cleanNotePromptResource;
+
     private String getPrompt(Resource resource) {
         try {
             return resource.getContentAsString(StandardCharsets.UTF_8);
@@ -71,7 +74,22 @@ public class LLMAIService implements AIService {
         var context = contextOp.join();
         var graph = graphOp.join();
 
-        // Feed into LLM
+        // Stage 1: Preprocess and clean/simplify the note
+        String cleanedNote = chatClient.prompt()
+                .system(getPrompt(this.cleanNotePromptResource))
+                .user(String.format("""
+                        Subject Name: %s
+                        Subject Context: %s
+                        
+                        Raw Note:
+                        %s
+                        """, context.name(), context.context(), note))
+                .call()
+                .content();
+
+        tracer.log("Preprocessed Cleaned Note: \n" + cleanedNote);
+
+        // Stage 2: Feed clean note into extraction and alignment LLM
         IngestionResponse response = chatClient.prompt()
                 .system(getPrompt(this.ingestNotePromptResource))
                 .user(String.format("""
@@ -84,7 +102,7 @@ public class LLMAIService implements AIService {
                         
                         New Note:
                         %s
-                        """, context.name(), context.context(), graph, note))
+                        """, context.name(), context.context(), graph, cleanedNote))
                 .call()
                 .entity(IngestionResponse.class);
 
