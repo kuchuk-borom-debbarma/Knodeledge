@@ -1,7 +1,8 @@
 package dev.kuku.knodeledge.controllers;
 
 import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
-import dev.kuku.knodeledge.infra.Traced;
+import dev.kuku.knodeledge.infra.topo_tracer.Traced;
+
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
 import dev.kuku.knodeledge.services.graph.GraphService;
 import dev.kuku.topotracer.sdk.Tracer;

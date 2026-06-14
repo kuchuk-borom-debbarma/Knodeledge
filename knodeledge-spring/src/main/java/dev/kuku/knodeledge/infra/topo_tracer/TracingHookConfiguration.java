@@ -40,6 +40,7 @@ public class TracingHookConfiguration {
     @Bean
     public dev.kuku.topotracer.spring.TracerBuilderCustomizer topoTracerCustomizer() {
         return builder -> {
+            builder.ignoreFailures(true);
             builder.importance(
                 KnodeledgeImportance.CONTROLLER,
                 KnodeledgeImportance.SERVICE,
@@ -59,5 +60,12 @@ public class TracingHookConfiguration {
             builder.nodeTypeImportance("method", 3);
         };
     }
+
+    @Bean
+    public org.springframework.ai.chat.client.ChatClient chatClient(org.springframework.ai.chat.client.ChatClient.Builder builder) {
+        return builder.build();
+    }
 }
+
+
 
