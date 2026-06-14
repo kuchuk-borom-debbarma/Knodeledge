@@ -1,6 +1,7 @@
 package dev.kuku.knodeledge;
 
 import dev.kuku.topotracer.spring.TracingClientHttpRequestInterceptor;
+import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
@@ -20,5 +21,10 @@ public class KnodeledgeSpringApplication {
         RestTemplate restTemplate = new RestTemplate();
         restTemplate.setInterceptors(Collections.singletonList(interceptor));
         return restTemplate;
+    }
+
+    @Bean
+    public ChatClient chatClient(ChatClient.Builder builder) {
+        return builder.build();
     }
 }
