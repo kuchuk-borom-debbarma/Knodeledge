@@ -1,6 +1,8 @@
 package dev.kuku.knodeledge.services.context_boundary.internal;
 
 import dev.kuku.knodeledge.controllers.models.CreateContextBoundaryBody;
+import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
+import dev.kuku.knodeledge.infra.topo_tracer.Traced;
 import dev.kuku.knodeledge.repositories.ContextBoundaryRepository;
 import dev.kuku.knodeledge.services.context_boundary.ContextBoundaryService;
 import dev.kuku.knodeledge.services.context_boundary.dto.ContextBoundary;
@@ -32,6 +34,9 @@ public class InMemoryContextBoundaryService implements ContextBoundaryService {
     }
 
     @Override
+    @Traced(
+        value = "context-boundary.load",
+        type = KnodeledgeImportanceLevel.SERVICE)
     public ContextBoundary getContextBoundaryById(String contextBoundaryId, String userId) {
         return contextBoundaryRepository.findById(contextBoundaryId)
             .filter(cb -> cb.userId().equals(userId))

@@ -1,6 +1,8 @@
 package dev.kuku.knodeledge.services.graph.internal;
 
 import dev.kuku.knodeledge.repositories.GraphRepository;
+import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
+import dev.kuku.knodeledge.infra.topo_tracer.Traced;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.NodeDto;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.EdgeDto;
@@ -16,6 +18,9 @@ public class InMemoryGraphService implements GraphService {
     private final GraphRepository graphRepository;
 
     @Override
+    @Traced(
+        value = "graph.load-complete",
+        type = KnodeledgeImportanceLevel.SERVICE)
     public GraphResponse getCompleteGraphByBoundaryId(String contextBoundaryId, String userId) {
         var nodes = graphRepository.findNodesByBoundaryId(contextBoundaryId);
         var edges = graphRepository.findEdgesByBoundaryId(contextBoundaryId);

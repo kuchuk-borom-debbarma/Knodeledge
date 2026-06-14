@@ -72,11 +72,13 @@ public class LLMAIService implements AIService {
         }
 
         // Retrieve context and graph in parallel
-        var contextOp = CompletableFuture.supplyAsync(tracer.wrapSupplier(
+        var parallel = tracer.parallel();
+        var contextOp = CompletableFuture.supplyAsync(parallel.wrapSupplier(
             () -> contextBoundaryService.getContextBoundaryById(contextBoundaryId, actorId)));
-        var graphOp = CompletableFuture.supplyAsync(tracer.wrapSupplier(
+        var graphOp = CompletableFuture.supplyAsync(parallel.wrapSupplier(
             () -> graphService.getCompleteGraphByBoundaryId(contextBoundaryId, actorId)));
         CompletableFuture.allOf(contextOp, graphOp).join();
+        parallel.join();
         var context = contextOp.join();
         var graph = graphOp.join();
 
