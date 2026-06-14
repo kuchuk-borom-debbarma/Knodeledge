@@ -6,7 +6,12 @@ CRITICAL RULES:
 2. STRICT CONNECTIVITY (NO ISOLATED NODES): Every single node in your output MUST be connected by at least one edge to the main actor (or to another connected node). You MUST NOT return any node that has no edges. If a movie/show/food is mentioned without an action (e.g., "Silent Voice is an anime"), you MUST infer an edge (e.g., [Actor] --INTERESTED_IN--> [Silent Voice]) to keep the graph connected.
 3. NO "IS_A" EDGES: Do NOT extract "IS_A" edges. Instead, represent categories as tags in the node's `categories` property (e.g. categories: ["anime", "media"] for "silent_voice").
 4. FUZZY SEMANTIC ALIGNING: Reuse existing node IDs if they refer to the same entity.
-5. COMPOUND DECOMPOSITION: Decompose compound concepts (e.g. "dry fruit in ice cream" -> "dry_fruit" and "ice_cream") and link them.
+5. CONDITIONAL PREFERENCES (Hybrid Schema): When a preference is conditional (e.g., "dislikes ice cream IF it contains dry fruit"), you MUST:
+   a) Extract BOTH entities as separate, real nodes: e.g. `ice_cream` and `dry_fruit`.
+   b) Set the `conditions` array on the conditional edge to the qualifying entity node IDs: e.g. `["dry_fruit"]`.
+   c) Leave `conditions` as an empty array `[]` for all unconditional relationships.
+   d) FORBIDDEN: Do NOT create composite nodes like "ice_cream_with_dry_fruit". This anti-pattern destroys graph traversal ability.
+   e) Unconditional and conditional edges for the same entity pair COEXIST — never drop either.
 6. RELATIONSHIP TAXONOMY: Categorize edge relationships as EVENT (WENT_HIKING, WATCHED), PREFERENCE (LIKES, DISLIKES, FAVORITE), or STATE (HAS_COLOR, ALLERGIC_TO).
 
 ---
@@ -28,31 +33,40 @@ CRITICAL RULES:
     {"id": "the_danger_in_my_heart", "label": "The danger in my heart", "categories": ["anime", "show"], "description": "Japanese anime show"}
   ],
   "edges": [
-    {"source": "amelia", "target": "rose", "predicate": "FAVORITE", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "Favourite flower rose"},
-    {"source": "rose", "target": "light_colour", "predicate": "HAS_COLOR", "taxonomyType": "STATE", "confidence": "HIGH", "context": "Roses light colour"},
-    {"source": "amelia", "target": "silent_voice", "predicate": "INTERESTED_IN", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "Silent voice is an anime"},
-    {"source": "amelia", "target": "hotarubi_no_mori_e", "predicate": "INTERESTED_IN", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "Hotarubi no Mori e is an anime"},
-    {"source": "amelia", "target": "the_danger_in_my_heart", "predicate": "INTERESTED_IN", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "The danger in my heart is an anime"}
+    {"source": "amelia", "target": "rose", "predicate": "FAVORITE", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "Favourite flower rose", "conditions": []},
+    {"source": "rose", "target": "light_colour", "predicate": "HAS_COLOR", "taxonomyType": "STATE", "confidence": "HIGH", "context": "Roses light colour", "conditions": []},
+    {"source": "amelia", "target": "silent_voice", "predicate": "INTERESTED_IN", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "Silent voice is an anime", "conditions": []},
+    {"source": "amelia", "target": "hotarubi_no_mori_e", "predicate": "INTERESTED_IN", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "Hotarubi no Mori e is an anime", "conditions": []},
+    {"source": "amelia", "target": "the_danger_in_my_heart", "predicate": "INTERESTED_IN", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "The danger in my heart is an anime", "conditions": []}
   ]
 }
 ```
 
-#### Example 2: Compound Entity Decomposition
-* **Context Boundary Subject**: twink
-* **New Note**: "Twink dislikes dry fruit in ice cream"
+#### Example 2: Conditional Preference — Hybrid Schema
+* **Context Boundary Subject**: amelia
+* **New Note**: "amelia likes ice cream but dislikes it when it contains dry fruit."
+* **Key rules**: Both `ice_cream` and `dry_fruit` are real separate nodes. The DISLIKES edge carries `conditions: ["dry_fruit"]`. The unconditional LIKES edge has `conditions: []`. Both edges COEXIST — do not drop either.
 * **JSON Output**:
 ```json
 {
   "nodes": [
-    {"id": "twink", "label": "twink", "categories": ["person"], "description": "Subject of the context"},
-    {"id": "dry_fruit_in_ice_cream", "label": "ice cream with dry fruit", "categories": ["dessert", "food"], "description": "Ice cream containing dry fruits"},
-    {"id": "dry_fruit", "label": "dry fruit", "categories": ["ingredient", "food"], "description": "Dried fruits"},
-    {"id": "ice_cream", "label": "Ice cream", "categories": ["dessert", "food"], "description": "Frozen dairy dessert"}
+    {"id": "amelia",    "label": "amelia",    "categories": ["person"],             "description": "Subject of the context"},
+    {"id": "ice_cream", "label": "Ice Cream", "categories": ["food", "dessert"],    "description": "Frozen dairy dessert"},
+    {"id": "dry_fruit", "label": "Dry Fruit", "categories": ["food", "ingredient"], "description": "Dried fruits used as ingredient"}
   ],
   "edges": [
-    {"source": "twink", "target": "dry_fruit_in_ice_cream", "predicate": "DISLIKES", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "Twink dislikes dry fruit in ice cream"},
-    {"source": "dry_fruit_in_ice_cream", "target": "dry_fruit", "predicate": "CONTAINS", "taxonomyType": "STATE", "confidence": "HIGH", "context": "dry fruit in ice cream"},
-    {"source": "dry_fruit_in_ice_cream", "target": "ice_cream", "predicate": "VARIATION_OF", "taxonomyType": "STATE", "confidence": "HIGH", "context": "dry fruit in ice cream"}
+    {
+      "source": "amelia", "target": "ice_cream", "predicate": "LIKES",
+      "taxonomyType": "PREFERENCE", "confidence": "HIGH",
+      "context": "amelia likes ice cream", "conditions": []
+    },
+    {
+      "source": "amelia", "target": "ice_cream", "predicate": "DISLIKES",
+      "taxonomyType": "PREFERENCE", "confidence": "HIGH",
+      "context": "amelia dislikes ice cream when it contains dry fruit",
+      "conditions": ["dry_fruit"]
+    }
   ]
 }
 ```
+

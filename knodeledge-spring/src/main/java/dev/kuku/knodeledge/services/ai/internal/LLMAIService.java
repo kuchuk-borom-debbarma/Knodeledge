@@ -136,7 +136,7 @@ public class LLMAIService implements AIService {
             ));
         }
 
-        // 2. Merge Edges (with Preference Supersession)
+        // 2. Merge Edges (with Preference Supersession and Conditional Coexistence)
         List<EdgeDto> activeEdges = new ArrayList<>();
         List<ExtractedEdgeDto> newPreferences = new ArrayList<>();
         List<ExtractedEdgeDto> newEventsAndStates = new ArrayList<>();
@@ -149,7 +149,7 @@ public class LLMAIService implements AIService {
             }
         }
 
-        // Process existing edges
+        // Process existing edges — keep unless superseded by a new edge with the same condition set
         for (var existingEdge : graph.edges()) {
             boolean superseded = false;
             for (var newEdge : response.edges()) {
@@ -170,7 +170,8 @@ public class LLMAIService implements AIService {
                 newPref.source(),
                 newPref.target(),
                 newPref.predicate(),
-                newPref.context()
+                newPref.context(),
+                newPref.conditions() != null ? newPref.conditions() : List.of()
             ));
         }
 
@@ -180,8 +181,41 @@ public class LLMAIService implements AIService {
                 edge.source(),
                 edge.target(),
                 edge.predicate(),
-                edge.context()
+                edge.context(),
+                edge.conditions() != null ? edge.conditions() : List.of()
             ));
+        }
+
+        // Auto-generate CONDITIONED_BY edges for conditional relationships.
+        // For each extracted edge with non-empty conditions, create a traversal edge
+        // from source -> condition_node so the chatbot/graph DB can traverse conditions
+        // without string matching. See docs/conditional-preferences-schema.md.
+        for (var edge : response.edges()) {
+            if (edge.conditions() == null || edge.conditions().isEmpty()) continue;
+            for (var conditionNodeId : edge.conditions()) {
+                // Only create the CONDITIONED_BY edge if the condition node actually exists
+                if (!mergedNodes.containsKey(conditionNodeId)) {
+                    tracer.log("CONDITIONED_BY skipped — condition node not in graph: " + conditionNodeId);
+                    continue;
+                }
+                var condByEdge = new EdgeDto(
+                    edge.source(),
+                    conditionNodeId,
+                    "CONDITIONED_BY",
+                    String.format("Condition for %s %s %s", edge.source(), edge.predicate(), edge.target()),
+                    List.of()
+                );
+                // Avoid duplicates if the same CONDITIONED_BY edge already exists
+                boolean alreadyPresent = activeEdges.stream().anyMatch(e ->
+                    e.source().equals(condByEdge.source()) &&
+                    e.target().equals(condByEdge.target()) &&
+                    e.predicate().equals("CONDITIONED_BY")
+                );
+                if (!alreadyPresent) {
+                    activeEdges.add(condByEdge);
+                    tracer.log("Auto-generated CONDITIONED_BY: " + condByEdge.source() + " -> " + condByEdge.target());
+                }
+            }
         }
 
         // 3. Save to database
@@ -189,30 +223,64 @@ public class LLMAIService implements AIService {
         tracer.log("Saved updated graph to database for boundary: " + contextBoundaryId);
     }
 
+    /**
+     * Determines whether an existing edge should be replaced by a newly extracted edge.
+     *
+     * <h3>Conditional Preference Rule (Hybrid Schema)</h3>
+     * <p>An unconditional edge and a conditional edge targeting the same entity
+     * ALWAYS coexist — they represent different semantic facts.
+     * Supersession only applies when both edges share the same condition set.
+     * See {@code docs/conditional-preferences-schema.md} for full rationale.</p>
+     *
+     * <p>Supersession cases:</p>
+     * <ul>
+     *   <li>Exact triple match (same source, target, predicate, same conditions) → update in-place.</li>
+     *   <li>Preference flip (LIKES ↔ DISLIKES) on the same target with the same conditions → supersede.</li>
+     *   <li>Singular predicate (FAVORITE*, CURRENT*) on same source with same conditions → supersede.</li>
+     *   <li>Differing condition sets → ALWAYS coexist, never supersede.</li>
+     * </ul>
+     */
     private boolean isSuperseded(EdgeDto existing, ExtractedEdgeDto newEdge) {
-        // 1. If source, target, and predicate are identical, the new one always overrides the old one (updates context/metadata)
-        if (existing.source().equals(newEdge.source()) && 
-            existing.target().equals(newEdge.target()) && 
+        // Edges with different condition sets always coexist — never supersede each other.
+        // This is the core rule of the hybrid conditional preferences schema.
+        if (!sameConditionSet(existing.conditions(), newEdge.conditions())) {
+            return false;
+        }
+
+        // 1. Exact triple: same source, target, predicate, same conditions → update in-place
+        if (existing.source().equals(newEdge.source()) &&
+            existing.target().equals(newEdge.target()) &&
             existing.predicate().equals(newEdge.predicate())) {
             return true;
         }
 
-        // 2. Preference mutation (e.g. LIKES -> DISLIKES or vice versa for the same target)
+        // 2. Preference flip (LIKES <-> DISLIKES) on the same target, same condition set
         if (existing.source().equals(newEdge.source()) && existing.target().equals(newEdge.target())) {
             if (isPreferencePredicate(existing.predicate()) && isPreferencePredicate(newEdge.predicate())) {
                 return true;
             }
         }
 
-        // 3. Singular preferences: if the predicate is singular (starts with FAVORITE or CURRENT), a new value replaces the old value regardless of target.
+        // 3. Singular predicates (FAVORITE*, CURRENT*): a new value replaces the old one
+        //    regardless of target, but only when conditions also match.
         if (existing.source().equals(newEdge.source()) && existing.predicate().equals(newEdge.predicate())) {
             String pred = existing.predicate().toUpperCase();
-            if (pred.startsWith("FAVORITE") || pred.startsWith("CURRENT") || pred.equals("FAVORITE")) {
+            if (pred.startsWith("FAVORITE") || pred.startsWith("CURRENT")) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Returns true if both condition sets contain the same node IDs (order-insensitive).
+     * Null and empty list are treated as equivalent (both mean "unconditional").
+     */
+    private boolean sameConditionSet(List<String> a, List<String> b) {
+        var setA = a == null ? Set.of() : new java.util.HashSet<>(a);
+        var setB = b == null ? Set.of() : new java.util.HashSet<>(b);
+        return setA.equals(setB);
     }
 
     private static final Set<String> PREFERENCE_PREDICATES = Set.of("LIKES", "DISLIKES", "FAVORITE");

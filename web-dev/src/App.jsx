@@ -106,25 +106,39 @@ function App() {
         size: 18
       }));
 
-      const visEdges = graphData.edges.map((e, idx) => ({
-        id: `edge-${idx}`,
-        from: e.source,
-        to: e.target,
-        label: e.predicate,
-        arrows: 'to',
-        font: { 
-          color: '#9ca3af', 
-          align: 'horizontal', 
-          size: 10, 
-          face: 'Inter', 
-          background: 'rgba(15, 17, 26, 0.95)', 
-          strokeWidth: 0 
-        },
-        color: { color: 'rgba(255,255,255,0.15)', hover: '#8b5cf6', highlight: '#8b5cf6' },
-        width: 1.5,
-        shadow: { enabled: true, color: 'rgba(0,0,0,0.3)', size: 3 },
-        smooth: { type: 'cubicBezier', roundness: 0.4 }
-      }));
+      const visEdges = graphData.edges.map((e, idx) => {
+        const isConditional = e.predicate !== 'CONDITIONED_BY' && e.conditions && e.conditions.length > 0;
+        const conditionSuffix = isConditional ? ` [when: ${e.conditions.join(', ')}]` : '';
+        return {
+          id: `edge-${idx}`,
+          from: e.source,
+          to: e.target,
+          label: e.predicate,
+          title: isConditional
+            ? `${e.predicate}\nConditioned by: ${e.conditions.join(', ')}\n${e.context || ''}`
+            : (e.context || e.predicate),
+          arrows: 'to',
+          font: {
+            color: isConditional ? '#f59e0b' : '#9ca3af',
+            align: 'horizontal',
+            size: 10,
+            face: 'Inter',
+            background: 'rgba(15, 17, 26, 0.95)',
+            strokeWidth: 0
+          },
+          color: {
+            color: e.predicate === 'CONDITIONED_BY' ? 'rgba(245,158,11,0.35)'
+                  : isConditional ? 'rgba(245,158,11,0.5)'
+                  : 'rgba(255,255,255,0.15)',
+            hover: '#8b5cf6',
+            highlight: '#8b5cf6'
+          },
+          dashes: e.predicate === 'CONDITIONED_BY',
+          width: 1.5,
+          shadow: { enabled: true, color: 'rgba(0,0,0,0.3)', size: 3 },
+          smooth: { type: 'cubicBezier', roundness: 0.4 }
+        };
+      });
 
       const data = { nodes: visNodes, edges: visEdges };
       const options = {
@@ -566,6 +580,24 @@ function App() {
                         {selectedElement.data.source} ── {selectedElement.data.predicate} ──&gt; {selectedElement.data.target}
                       </div>
                     </div>
+                    {selectedElement.data.conditions && selectedElement.data.conditions.length > 0 && (
+                      <div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Conditions (applies when)</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                          {selectedElement.data.conditions.map((c, i) => (
+                            <span key={i} style={{
+                              background: 'rgba(245,158,11,0.15)',
+                              border: '1px solid rgba(245,158,11,0.5)',
+                              color: '#f59e0b',
+                              borderRadius: '4px',
+                              padding: '2px 8px',
+                              fontSize: '11px',
+                              fontWeight: 600
+                            }}>{c}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     <div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Raw Ingest Sentence</div>
                       <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: 1.4, fontStyle: 'italic' }}>
