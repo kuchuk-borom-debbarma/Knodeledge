@@ -33,10 +33,10 @@ public class LLMAIService implements AIService {
     private final ContextBoundaryService contextBoundaryService;
     private final GraphService graphService;
 
-    @Value("classpath:/prompts/node_edge_prompt.st")
+    @Value("classpath:/prompts/entity_context_node_edge_prompt.st")
     private Resource nodeEdgePromptResource;
 
-    @Value("classpath:/prompts/ingest_note_prompt.st")
+    @Value("classpath:/prompts/entity_context_ingest_prompt.st")
     private Resource ingestNotePromptResource;
 
     private String getPrompt(Resource resource) {
