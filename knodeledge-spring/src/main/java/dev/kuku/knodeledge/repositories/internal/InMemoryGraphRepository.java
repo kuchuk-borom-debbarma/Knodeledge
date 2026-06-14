@@ -34,4 +34,12 @@ public class InMemoryGraphRepository implements GraphRepository {
     public List<EdgeDto> findEdgesByBoundaryId(String contextBoundaryId) {
         return boundaryEdges.getOrDefault(contextBoundaryId, List.of());
     }
+
+    public Map<String, List<NodeDto>> getAllNodesDebug() {
+        return boundaryNodes;
+    }
+
+    public Map<String, List<EdgeDto>> getAllEdgesDebug() {
+        return boundaryEdges;
+    }
 }

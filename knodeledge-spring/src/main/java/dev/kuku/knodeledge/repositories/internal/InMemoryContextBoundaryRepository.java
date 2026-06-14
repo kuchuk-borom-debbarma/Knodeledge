@@ -35,4 +35,8 @@ public class InMemoryContextBoundaryRepository implements ContextBoundaryReposit
         }
         return results;
     }
+
+    public Map<String, ContextBoundary> getAllStoreDebug() {
+        return store;
+    }
 }

@@ -15,7 +15,18 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class GraphController {
     private final GraphService graphService;
+    private final dev.kuku.knodeledge.repositories.internal.InMemoryGraphRepository inMemoryGraphRepository;
+    private final dev.kuku.knodeledge.repositories.internal.InMemoryContextBoundaryRepository inMemoryContextBoundaryRepository;
     private final Tracer tracer;
+
+    @GetMapping("/debug-all")
+    public ResponseEntity<Object> getDebugAll() {
+        return ResponseEntity.ok(java.util.Map.of(
+            "nodes", inMemoryGraphRepository.getAllNodesDebug(),
+            "edges", inMemoryGraphRepository.getAllEdgesDebug(),
+            "boundaries", inMemoryContextBoundaryRepository.getAllStoreDebug()
+        ));
+    }
 
     @GetMapping("/{contextBoundaryId}")
     @Traced(value = "graph-controller.get-graph", type = KnodeledgeImportanceLevel.CONTROLLER)

@@ -10,7 +10,7 @@ public class GraphDto {
     public record NodeDto(
         String id,
         String label,
-        String category,
+        List<String> categories,
         String description
     ) {}
 
@@ -29,7 +29,7 @@ public class GraphDto {
     public record ExtractedNodeDto(
         String id,
         String label,
-        String category,
+        List<String> categories,
         String description,
         String confidence // HIGH, MEDIUM, LOW
     ) {}

@@ -15,11 +15,17 @@ import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.IngestionResponse;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.NodeDto;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.EdgeDto;
+import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.ExtractedEdgeDto;
 
 /**
  * LLM focused AIService work-flow
@@ -57,7 +63,6 @@ public class LLMAIService implements AIService {
         if (StringUtil.isNullOrEmpty(note)) {
             tracer.log("Note is null or empty!");
         }
-        //TODO how to use topo tracer nicely here? I want to show parent having 2 children to contextOp trace and one to graphOp trace but challenge is how to represent join? next trace log will have 2 parent?
 
         // Retrieve context and graph in parallel
         var contextOp = CompletableFuture.supplyAsync(() -> contextBoundaryService.getContextBoundaryById(contextBoundaryId, actorId));
@@ -66,7 +71,7 @@ public class LLMAIService implements AIService {
         var context = contextOp.join();
         var graph = graphOp.join();
 
-        //Feed into LLM
+        // Feed into LLM
         IngestionResponse response = chatClient.prompt()
                 .system(getPrompt(this.ingestNotePromptResource))
                 .user(String.format("""
@@ -87,7 +92,7 @@ public class LLMAIService implements AIService {
             throw new RuntimeException("Failed to ingest note and generate graph updates");
         }
 
-        tracer.log("Successfully processed note ingestion", java.util.Map.of(
+        tracer.log("Successfully processed note ingestion", Map.of(
                 "extractedNodesCount", String.valueOf(response.nodes().size()),
                 "extractedEdgesCount", String.valueOf(response.edges().size())
         ));
@@ -100,7 +105,7 @@ public class LLMAIService implements AIService {
         }
 
         // 1. Merge Nodes
-        java.util.Map<String, NodeDto> mergedNodes = new java.util.LinkedHashMap<>();
+        Map<String, NodeDto> mergedNodes = new LinkedHashMap<>();
         for (var node : graph.nodes()) {
             mergedNodes.put(node.id(), node);
         }
@@ -108,15 +113,15 @@ public class LLMAIService implements AIService {
             mergedNodes.put(extNode.id(), new NodeDto(
                 extNode.id(),
                 extNode.label(),
-                extNode.category(),
+                extNode.categories(),
                 extNode.description()
             ));
         }
 
         // 2. Merge Edges (with Preference Supersession)
-        java.util.List<EdgeDto> activeEdges = new java.util.ArrayList<>();
-        java.util.List<dev.kuku.knodeledge.services.ai.internal.models.GraphDto.ExtractedEdgeDto> newPreferences = new java.util.ArrayList<>();
-        java.util.List<dev.kuku.knodeledge.services.ai.internal.models.GraphDto.ExtractedEdgeDto> newEventsAndStates = new java.util.ArrayList<>();
+        List<EdgeDto> activeEdges = new ArrayList<>();
+        List<ExtractedEdgeDto> newPreferences = new ArrayList<>();
+        List<ExtractedEdgeDto> newEventsAndStates = new ArrayList<>();
 
         for (var edge : response.edges()) {
             if ("PREFERENCE".equalsIgnoreCase(edge.taxonomyType())) {
@@ -129,10 +134,10 @@ public class LLMAIService implements AIService {
         // Process existing edges
         for (var existingEdge : graph.edges()) {
             boolean superseded = false;
-            for (var newPref : newPreferences) {
-                if (existingEdge.source().equals(newPref.source()) && existingEdge.predicate().equals(newPref.predicate())) {
+            for (var newEdge : response.edges()) {
+                if (isSuperseded(existingEdge, newEdge)) {
                     superseded = true;
-                    tracer.log("Edge superseded (Preference change): " + existingEdge.source() + " -" + existingEdge.predicate() + "-> " + existingEdge.target() + " replaced by " + newPref.target());
+                    tracer.log("Edge superseded: " + existingEdge.source() + " -" + existingEdge.predicate() + "-> " + existingEdge.target() + " replaced by " + newEdge.predicate() + " -> " + newEdge.target());
                     break;
                 }
             }
@@ -162,7 +167,43 @@ public class LLMAIService implements AIService {
         }
 
         // 3. Save to database
-        graphService.saveGraph(contextBoundaryId, new java.util.ArrayList<>(mergedNodes.values()), activeEdges);
+        graphService.saveGraph(contextBoundaryId, new ArrayList<>(mergedNodes.values()), activeEdges);
         tracer.log("Saved updated graph to database for boundary: " + contextBoundaryId);
+    }
+
+    private boolean isSuperseded(EdgeDto existing, ExtractedEdgeDto newEdge) {
+        // 1. If source, target, and predicate are identical, the new one always overrides the old one (updates context/metadata)
+        if (existing.source().equals(newEdge.source()) && 
+            existing.target().equals(newEdge.target()) && 
+            existing.predicate().equals(newEdge.predicate())) {
+            return true;
+        }
+
+        // 2. Preference mutation (e.g. LIKES -> DISLIKES or vice versa for the same target)
+        if (existing.source().equals(newEdge.source()) && existing.target().equals(newEdge.target())) {
+            if (isPreferencePredicate(existing.predicate()) && isPreferencePredicate(newEdge.predicate())) {
+                return true;
+            }
+        }
+
+        // 3. Singular preferences: if the predicate is singular (starts with FAVORITE or CURRENT), a new value replaces the old value regardless of target.
+        if (existing.source().equals(newEdge.source()) && existing.predicate().equals(newEdge.predicate())) {
+            String pred = existing.predicate().toUpperCase();
+            if (pred.startsWith("FAVORITE") || pred.startsWith("CURRENT") || pred.equals("FAVORITE")) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static final Set<String> PREFERENCE_PREDICATES = Set.of("LIKES", "DISLIKES", "FAVORITE");
+
+    private boolean isPreferencePredicate(String predicate) {
+        if (predicate == null) {
+            return false;
+        }
+        String p = predicate.toUpperCase();
+        return PREFERENCE_PREDICATES.contains(p) || p.startsWith("FAVORITE_");
     }
 }

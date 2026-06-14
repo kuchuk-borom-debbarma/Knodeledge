@@ -97,8 +97,8 @@ function App() {
       const visNodes = graphData.nodes.map(n => ({
         id: n.id,
         label: n.label,
-        title: `${n.label} (${n.category || 'Concept'})\n${n.description || ''}`,
-        color: getNodeColor(n.category),
+        title: `${n.label} (${(n.categories || []).join(', ') || 'Concept'})\n${n.description || ''}`,
+        color: getNodeColor(n.categories),
         font: { color: '#ffffff', face: 'Inter', size: 13, bold: true },
         borderWidth: 2,
         shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 4 },
@@ -169,19 +169,22 @@ function App() {
   }, [graphData]);
 
   // Color mapper based on node categories
-  const getNodeColor = (category) => {
-    const cat = (category || '').toLowerCase();
-    if (cat.includes('person') || cat.includes('user')) {
+  const getNodeColor = (categories) => {
+    const cats = (categories || []).map(c => c.toLowerCase());
+    if (cats.some(c => c.includes('person') || c.includes('user'))) {
       return { background: '#1e1b4b', border: '#818cf8', highlight: { background: '#312e81', border: '#a5b4fc' } };
     }
-    if (cat.includes('sport') || cat.includes('activity') || cat.includes('hobby')) {
+    if (cats.some(c => c.includes('sport') || c.includes('activity') || c.includes('hobby'))) {
       return { background: '#064e3b', border: '#34d399', highlight: { background: '#065f46', border: '#6ee7b7' } };
     }
-    if (cat.includes('fruit') || cat.includes('food')) {
+    if (cats.some(c => c.includes('fruit') || c.includes('food') || c.includes('vegetable') || c.includes('ingredient'))) {
       return { background: '#7c2d12', border: '#fb923c', highlight: { background: '#9a3412', border: '#fdba74' } };
     }
-    if (cat.includes('place') || cat.includes('location')) {
+    if (cats.some(c => c.includes('place') || c.includes('location'))) {
       return { background: '#0c4a6e', border: '#38bdf8', highlight: { background: '#075985', border: '#7dd3fc' } };
+    }
+    if (cats.some(c => c.includes('show') || c.includes('movie') || c.includes('anime') || c.includes('media'))) {
+      return { background: '#581c87', border: '#c084fc', highlight: { background: '#6b21a8', border: '#d8b4fe' } };
     }
     // Default Concept color
     return { background: '#1f2937', border: '#9ca3af', highlight: { background: '#374151', border: '#d1d5db' } };
@@ -543,7 +546,7 @@ function App() {
                     <div>
                       <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Category / Type</div>
                       <div style={{ fontSize: '13px', color: 'var(--accent-purple)', fontWeight: 500 }}>
-                        {selectedElement.data.category || 'Concept'}
+                        {(selectedElement.data.categories || []).join(', ') || 'Concept'}
                       </div>
                     </div>
                     {selectedElement.data.description && (
