@@ -43,17 +43,33 @@ Never use IS_A as a predicate. Express type/category as the node's `categories` 
   Bad:  python --IS_A--> programming_language
   Good: node "python" with categories: ["programming_language", "technology"]
 
-RULE 3 — NODE ID NORMALISATION
+RULE 3 — NODE ID NORMALISATION & DEDUPLICATION
 IDs must be snake_case, lowercase, singular, and stable across ingestions.
   "Movies" → "movie", "New York City" → "new_york_city", "Running marathons" → "marathon"
 Reuse existing node IDs from the Existing Graph for the same entity (fuzzy match).
+CRITICAL: Morphological variants of the same concept MUST map to one ID.
+  "gaming", "game", "games", "video game" → all use id "game"
+  "music making", "music creation", "music" → all use id "music"
+  "anime shows", "anime" → use id "anime"
+Do NOT create two separate nodes that represent the same real-world concept.
 
 RULE 4 — RELATIONSHIP TAXONOMY
 Every edge is exactly one of:
-  EVENT      — something that happened: ATTENDED, WATCHED, VISITED, COMPLETED, WON
-  PREFERENCE — attitudes/tastes: LIKES, DISLIKES, FAVORITE, INTERESTED_IN, AVOIDS
-  STATE      — persistent attributes: WORKS_AT, LIVES_IN, ALLERGIC_TO, SPEAKS, SPECIALIZES_IN
-Use specific semantic predicates. Avoid vague ones like HAS or RELATED_TO.
+  EVENT      — something that happened or is actively done:
+               ATTENDED, WATCHED, VISITED, COMPLETED, WON
+               PLAYS     (actively plays a game or instrument: "plays guitar", "plays R6S")
+               CREATES   (produces creative output: "makes music", "writes novels", "draws art")
+               PRACTICES (a regular skill/discipline: "practices yoga", "practices coding")
+  PREFERENCE — attitudes and tastes:
+               LIKES, DISLIKES, FAVORITE, INTERESTED_IN, AVOIDS
+  STATE      — persistent attributes:
+               WORKS_AT, LIVES_IN, ALLERGIC_TO, SPEAKS, SPECIALIZES_IN, SUBCATEGORY_OF
+
+Choose the most specific predicate. Common mistakes to avoid:
+  "makes music"        → CREATES (not INTERESTED_IN, not LIKES)
+  "plays guitar"       → PLAYS   (not LIKES)
+  "plays Rainbow Six"  → PLAYS   (not LIKES)
+  "enjoys hiking"      → LIKES   (no active skill implied, LIKES is correct here)
 
 RULE 5 — CONDITIONAL PREFERENCES (Hybrid Schema)
 When a preference is qualified by a condition ("likes X but not when it has Y"):
@@ -73,37 +89,49 @@ RULE 7 — CONFIDENCE SCORING
   MEDIUM — strongly implied
   LOW    — inferred with uncertainty
 
+RULE 8 — IMPLIED INSTANCE LINKING
+When the note implies that a specific entity X is an instance of a general concept Y
+(e.g. "plays Rainbow Six Siege game" implies R6S is a game):
+  a) Add the general concept to X's categories: rainbow_six_siege.categories includes "game"
+  b) If Y already exists as a node in the Existing Graph, add a STATE edge:
+     rainbow_six_siege --SUBCATEGORY_OF--> game  (confidence: MEDIUM)
+  c) This makes X reachable via graph traversal of Y — critical for chatbot queries like
+     "what games does the actor play?" finding specific game titles.
+
 ---
 
 EXAMPLES:
 
-## Example 1 — Mixed preferences, states, events, and actor anchoring
+## Example 1 — PLAYS vs LIKES vs CREATES, entity deduplication, and implied instance linking
 
-Context Boundary Subject: sarah
-Existing Graph: (empty)
+Context Boundary Subject: leo
+Existing Graph:
+  nodes: [{id: "leo", ...}, {id: "game", label: "Gaming", categories: ["hobby", "entertainment"], ...}]
+  edges: [{source: "leo", target: "game", predicate: "LIKES", conditions: []}]
 New Note:
-sarah enjoys rock climbing on weekends.
-sarah's favorite programming language is Python.
-sarah works at a fintech startup in Berlin.
-sarah is allergic to peanuts.
+leo plays guitar.
+leo creates music occasionally.
+leo plays Counter-Strike, which is a shooter game.
 
 {
   "nodes": [
-    {"id": "sarah",          "label": "sarah",           "categories": ["person"],                       "description": "Subject of this context",                      "confidence": "HIGH"},
-    {"id": "rock_climbing",  "label": "Rock Climbing",   "categories": ["sport", "outdoor_activity"],    "description": "Outdoor sport involving climbing rocks",       "confidence": "HIGH"},
-    {"id": "python",         "label": "Python",          "categories": ["programming_language"],         "description": "Python programming language",                  "confidence": "HIGH"},
-    {"id": "fintech_startup","label": "Fintech Startup", "categories": ["company", "startup"],           "description": "A financial technology startup",               "confidence": "HIGH"},
-    {"id": "berlin",         "label": "Berlin",          "categories": ["city", "location"],             "description": "Capital city of Germany",                     "confidence": "HIGH"},
-    {"id": "peanut",         "label": "Peanut",          "categories": ["food", "allergen"],             "description": "Legume commonly causing food allergies",       "confidence": "HIGH"}
+    {"id": "leo",           "label": "leo",           "categories": ["person"],                           "description": "Subject of this context",                            "confidence": "HIGH"},
+    {"id": "guitar",        "label": "Guitar",        "categories": ["instrument", "music"],             "description": "String musical instrument",                          "confidence": "HIGH"},
+    {"id": "music",         "label": "Music",         "categories": ["art", "creative"],                 "description": "Creative audio art form",                            "confidence": "HIGH"},
+    {"id": "counter_strike","label": "Counter-Strike","categories": ["game", "fps", "shooter"],         "description": "First-person shooter game by Valve",                  "confidence": "HIGH"}
   ],
   "edges": [
-    {"source": "sarah",          "target": "rock_climbing",  "predicate": "LIKES",      "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "sarah enjoys rock climbing on weekends",             "conditions": []},
-    {"source": "sarah",          "target": "python",         "predicate": "FAVORITE",   "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "sarah's favorite programming language is Python",    "conditions": []},
-    {"source": "sarah",          "target": "fintech_startup","predicate": "WORKS_AT",   "taxonomyType": "STATE",      "confidence": "HIGH", "context": "sarah works at a fintech startup in Berlin",         "conditions": []},
-    {"source": "fintech_startup","target": "berlin",         "predicate": "LOCATED_IN", "taxonomyType": "STATE",      "confidence": "HIGH", "context": "sarah works at a fintech startup in Berlin",         "conditions": []},
-    {"source": "sarah",          "target": "peanut",         "predicate": "ALLERGIC_TO","taxonomyType": "STATE",      "confidence": "HIGH", "context": "sarah is allergic to peanuts",                      "conditions": []}
+    {"source": "leo",           "target": "guitar",        "predicate": "PLAYS",         "taxonomyType": "EVENT",  "confidence": "HIGH",   "context": "leo plays guitar",                              "conditions": []},
+    {"source": "leo",           "target": "music",         "predicate": "CREATES",       "taxonomyType": "EVENT",  "confidence": "HIGH",   "context": "leo creates music occasionally",                  "conditions": []},
+    {"source": "leo",           "target": "counter_strike","predicate": "PLAYS",         "taxonomyType": "EVENT",  "confidence": "HIGH",   "context": "leo plays Counter-Strike, which is a shooter game","conditions": []},
+    {"source": "counter_strike","target": "game",          "predicate": "SUBCATEGORY_OF","taxonomyType": "STATE",  "confidence": "MEDIUM", "context": "Counter-Strike is a shooter game",               "conditions": []}
   ]
 }
+
+Note: "game" already existed in the graph so counter_strike gets a SUBCATEGORY_OF edge linking
+it into the game node — making it reachable when querying "what games does leo play?".
+Also: "creates music" → CREATES (EVENT), NOT INTERESTED_IN or LIKES.
+"plays guitar" → PLAYS (EVENT), NOT LIKES.
 
 ---
 

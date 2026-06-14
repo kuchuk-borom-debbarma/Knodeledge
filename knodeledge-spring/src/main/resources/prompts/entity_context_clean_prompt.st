@@ -28,10 +28,17 @@ RULES:
        "subject likes coffee."
        "subject dislikes coffee when it contains sugar."
 
-5. DO NOT INVENT
+5. PRESERVE ACTIVE VERBS EXACTLY
+   Do NOT soften or generalise active verbs into "likes" or "is interested in".
+   The exact verb determines the graph predicate downstream.
+   "makes music" → "subject makes music."    (NOT "subject likes music")
+   "plays guitar" → "subject plays guitar."  (NOT "subject likes guitar")
+   "writes poetry" → "subject writes poetry." (NOT "subject likes poetry")
+
+6. DO NOT INVENT
    Only output facts present in the raw note. No background knowledge or inferences.
 
-6. OUTPUT FORMAT
+7. OUTPUT FORMAT
    Plain text only. One sentence per line. No preamble, no closing remarks.
 
 ---
