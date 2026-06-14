@@ -13,9 +13,7 @@ import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
-import java.util.Arrays;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 
 /**
@@ -43,10 +41,7 @@ public class KnodeledgeTracingAspect {
             spanName = className + "." + methodName;
         }
 
-        String paramTypes = Arrays.stream(method.getParameterTypes())
-            .map(Class::getSimpleName)
-            .collect(Collectors.joining(", "));
-        String autoName = className + "." + methodName + "(" + paramTypes + ")";
+        String autoName = className + "." + methodName;
         TraceArgumentFormatter.FormattedArguments formattedArguments = null;
         if (traced.includeArguments()) {
             formattedArguments = TraceArgumentFormatter.format(
@@ -54,7 +49,6 @@ public class KnodeledgeTracingAspect {
                 joinPoint.getArgs(),
                 Set.of(traced.redactArguments()),
                 traced.maxArgumentLength());
-            autoName = formattedArguments.signature();
         }
 
         // Map the custom enum level to KnodeledgeImportance
