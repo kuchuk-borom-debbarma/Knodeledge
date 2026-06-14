@@ -19,10 +19,10 @@ OUTPUT SCHEMA:
     {
       "source":       "<source node id>",
       "target":       "<target node id>",
-      "predicate":    "<UPPER_SNAKE_CASE relationship>",
+      "predicate":    "<UPPER_SNAKE_CASE verb>",
       "taxonomyType": "EVENT | PREFERENCE | STATE",
       "confidence":   "HIGH | MEDIUM | LOW",
-      "context":      "<the exact cleaned sentence this came from>",
+      "context":      "<exact sentence from the note this came from>",
       "conditions":   ["<condition_node_id>"]
     }
   ]
@@ -33,142 +33,117 @@ OUTPUT SCHEMA:
 RULES:
 
 RULE 1 — ACTOR ANCHORING
-The Context Boundary Name is the primary actor. Every extracted node MUST connect to the
-actor (directly or indirectly) via at least one edge. No isolated nodes allowed.
-If a classification fact is given ("Python is a language") without an explicit actor link,
-infer a reasonable edge (actor --INTERESTED_IN--> python, confidence: MEDIUM).
-Person-to-person relationships are valid: if the note mentions another person and their
-relationship to the actor, create a person node and a relationship edge.
-  "works with Sarah" → sarah (person node) + actor --WORKS_WITH--> sarah
-  "is friends with Tom" → tom (person node) + actor --FRIENDS_WITH--> tom
+The Context Boundary Name is the primary actor. Every node MUST connect (directly or
+indirectly) to the actor via at least one edge. No isolated nodes.
+Implicit links: if a classification fact ("Python is a language") lacks an actor edge,
+infer one (actor --INTERESTED_IN--> python, MEDIUM confidence).
+Person-to-person edges are valid: actor --FRIENDS_WITH--> sarah, actor --WORKS_WITH--> tom.
 
-RULE 2 — NO IS_A EDGES
-Never use IS_A as a predicate. Express type/category as the node's `categories` array.
+RULE 2 — NODE ID NORMALISATION & DEDUPLICATION
+IDs must be snake_case, lowercase, singular, stable across ingestions.
+The same real-world concept must always map to the same ID regardless of how it is phrased:
+  "gaming" / "game" / "games" / "video games" → id "game"
+  "music making" / "music creation" / "music" → id "music"
+Reuse existing node IDs from the Existing Graph when the entity is the same (fuzzy match).
+
+RULE 3 — NO IS_A EDGES
+Type/category belongs in the node's `categories` array, never as a predicate.
   Bad:  python --IS_A--> programming_language
-  Good: node "python" with categories: ["programming_language", "technology"]
+  Good: node "python" with categories: ["programming_language"]
 
-RULE 3 — NODE ID NORMALISATION & DEDUPLICATION
-IDs must be snake_case, lowercase, singular, and stable across ingestions.
-  "Movies" → "movie", "New York City" → "new_york_city", "Running marathons" → "marathon"
-Reuse existing node IDs from the Existing Graph for the same entity (fuzzy match).
-CRITICAL: Morphological variants of the same concept MUST map to one ID.
-  "gaming", "game", "games", "video game" → all use id "game"
-  "music making", "music creation", "music" → all use id "music"
-  "anime shows", "anime" → use id "anime"
-Do NOT create two separate nodes that represent the same real-world concept.
+RULE 4 — OPEN PREDICATE VOCABULARY, THREE TAXONOMY TYPES
+Every edge has a taxonomyType of EVENT, PREFERENCE, or STATE.
+The predicate is the most semantically precise UPPER_SNAKE_CASE verb for the relationship.
+The examples below are a starting vocabulary — NOT a closed list. Invent any verb that fits.
 
-TEMPORAL STATES: If the note describes a past state ("used to", "previously", "formerly"),
-the predicate must reflect that it is no longer current. Use a past-form predicate to avoid
-overwriting a current state:
-  "used to live in London" → PREVIOUSLY_LIVED_IN  (not LIVES_IN)
-  "used to work at Google" → PREVIOUSLY_WORKED_AT (not WORKS_AT)
-  "formerly studied chemistry" → PREVIOUSLY_STUDIED (not STUDIES)
-This prevents a past state from falsely overwriting a current one in the graph.
+  EVENT      Things that happen or are actively performed:
+             PLAYS, CREATES, PRACTICES, ATTENDED, WATCHED, VISITED, WON, COMPETED_IN
+  PREFERENCE Attitudes and tastes:
+             LIKES, DISLIKES, FAVORITE, INTERESTED_IN, AVOIDS
+  STATE      Persistent attributes and facts (including past states):
+             WORKS_AT, LIVES_IN, SPEAKS, ALLERGIC_TO, SPECIALIZES_IN,
+             SUBCATEGORY_OF, FRIENDS_WITH, MARRIED_TO, BORN_IN, PART_OF,
+             PREVIOUSLY_LIVED_IN, PREVIOUSLY_WORKED_AT
 
-RULE 4 — RELATIONSHIP TAXONOMY
-Every edge belongs to exactly one taxonomyType:
-  EVENT      — something that happened or is actively done
-  PREFERENCE — attitudes, tastes, and opinions
-  STATE      — persistent attributes and conditions
+  Key predicate decision rules:
+  - Use the verb that exactly matches the action — never generalise to LIKES or INTERESTED_IN
+    when a more specific verb applies.
+    "makes music" → CREATES (EVENT)    "plays guitar" → PLAYS (EVENT)
+  - Past-tense states must use a distinct past predicate to avoid overwriting current state.
+    "used to live in London" → PREVIOUSLY_LIVED_IN    NOT LIVES_IN
 
-The predicate is an UPPER_SNAKE_CASE verb that precisely describes the relationship.
-The lists below are COMMON EXAMPLES, NOT a closed vocabulary. If none fit, invent
-the most semantically accurate verb possible.
+RULE 5 — HYPONYM LINKING (SUBCATEGORY_OF)
+When the note implies that entity X is a specific instance or specialisation of broader
+concept Y, create: X --SUBCATEGORY_OF--> Y  (STATE, confidence: MEDIUM)
+Also add Y's category tag to X's categories array.
 
-  EVENT examples:  ATTENDED, WATCHED, VISITED, COMPLETED, WON, PLAYED, PLAYS,
-                   CREATES, PRACTICES, STUDIED_AT, WORKED_AT, COMPETED_IN
-  PREFERENCE examples: LIKES, DISLIKES, FAVORITE, INTERESTED_IN, AVOIDS
-  STATE examples:  WORKS_AT, LIVES_IN, ALLERGIC_TO, SPEAKS, SPECIALIZES_IN,
-                   SUBCATEGORY_OF, FRIENDS_WITH, MARRIED_TO, BORN_IN, PART_OF,
-                   PREVIOUSLY_LIVED_IN, PREVIOUSLY_WORKED_AT, SIBLING_OF
+This principle is DOMAIN-AGNOSTIC. Apply it uniformly across all domains:
+  - "plays Rainbow Six Siege game"        → rainbow_six_siege --SUBCATEGORY_OF--> game
+  - "watches anime like Attack on Titan"  → attack_on_titan --SUBCATEGORY_OF--> anime
+  - "programmer who likes game dev"       → game_development --SUBCATEGORY_OF--> programmer
+  - "chef specialising in sushi"          → sushi --SUBCATEGORY_OF--> cuisine
+  - "studies CS, interested in ML"        → machine_learning --SUBCATEGORY_OF--> computer_science
+  - "listens to jazz, a type of music"    → jazz --SUBCATEGORY_OF--> music
 
-Choose the most specific predicate. Common mistakes to avoid:
-  "makes music"       → CREATES      (not INTERESTED_IN, not LIKES)
-  "plays guitar"      → PLAYS        (not LIKES)
-  "used to live in X" → PREVIOUSLY_LIVED_IN  (not LIVES_IN — see Rule 3 temporal states)
-  "enjoys hiking"     → LIKES        (passive enjoyment, no active skill = LIKES is correct)
+The trigger is the semantic relationship (X is a kind of Y), not specific keywords.
+Apply whether Y is in the Existing Graph or newly created in the same extraction batch.
 
-RULE 5 — CONDITIONAL PREFERENCES (Hybrid Schema)
+RULE 6 — CONDITIONAL PREFERENCES
 When a preference is qualified by a condition ("likes X but not when it has Y"):
   a) Extract both X and Y as separate real nodes.
   b) Set "conditions": ["y_id"] on the conditional edge.
-  c) Set "conditions": [] on all unconditional edges — never omit the field.
-  d) Unconditional and conditional edges for the same entity COEXIST — never drop either.
-  e) FORBIDDEN: Do NOT create composite nodes like "coffee_with_sugar". This destroys traversal.
+  c) Set "conditions": [] on ALL unconditional edges — never omit the field.
+  d) Unconditional and conditional edges for the same entity COEXIST — do not drop either.
+  e) FORBIDDEN: never create composite nodes like "coffee_with_sugar".
 
-RULE 6 — COMPOUND DECOMPOSITION
-Decompose "X and Y" or "X with Y" into separate nodes with explicit linking edges.
+RULE 7 — COMPOUND DECOMPOSITION
+When "X and Y" or "X with Y" is a combined concept, decompose into separate nodes and
+link them explicitly. Apply uniformly:
   "allergic to shellfish and nuts" → two ALLERGIC_TO edges
-  "internship at Google in Tokyo" → event node + LOCATED_IN edge to tokyo + AT_COMPANY edge to google
+  "internship at Google in Tokyo"  → internship node + AT_COMPANY(google) + LOCATED_IN(tokyo)
 
-RULE 7 — CONFIDENCE SCORING
-  HIGH   — explicitly stated
-  MEDIUM — strongly implied
+RULE 8 — CONFIDENCE SCORING
+  HIGH   — explicitly stated in the note
+  MEDIUM — strongly implied by context
   LOW    — inferred with uncertainty
-
-RULE 8 — IMPLIED INSTANCE LINKING
-When the note implies that a specific entity X is a specialisation/instance of a general
-concept Y, create a SUBCATEGORY_OF edge from X to Y. This applies to ALL domains:
-
-  Object categorisation:
-    "plays Rainbow Six Siege game"   → rainbow_six_siege --SUBCATEGORY_OF--> game
-    "watches anime like Attack on Titan" → attack_on_titan --SUBCATEGORY_OF--> anime
-
-  Professional skill hierarchy:
-    "is a programmer, likes game development" → game_development --SUBCATEGORY_OF--> programmer
-    "is a chef, specialises in sushi"         → sushi --SUBCATEGORY_OF--> cuisine
-
-  Academic field hierarchy:
-    "studies CS, interested in machine learning" → machine_learning --SUBCATEGORY_OF--> computer_science
-
-Steps:
-  a) Add Y's category to X's categories array.
-  b) Add SUBCATEGORY_OF (STATE, confidence: MEDIUM) from X to Y.
-  c) This applies whether Y pre-exists in the Existing Graph OR is new in the same batch.
-     Do NOT skip the edge just because Y is also being created in the same extraction.
-
-This makes X reachable via graph traversal of Y — essential for chatbot queries like
-"what games does the actor play?" or "what does the actor programme?".
 
 ---
 
 EXAMPLES:
 
-## Example 1 — PLAYS vs CREATES, same-batch SUBCATEGORY_OF (both nodes new)
+## Example 1 — PLAYS/CREATES vs LIKES, same-batch hyponym linking, deduplication
 
 Context Boundary Subject: leo
 Existing Graph: (empty)
 New Note:
 leo plays guitar.
-leo creates music occasionally.
+leo creates music.
 leo enjoys gaming.
 leo plays Counter-Strike, which is a shooter game.
 
 {
   "nodes": [
-    {"id": "leo",           "label": "leo",           "categories": ["person"],                "description": "Subject of this context",          "confidence": "HIGH"},
-    {"id": "guitar",        "label": "Guitar",        "categories": ["instrument", "music"],   "description": "String musical instrument",         "confidence": "HIGH"},
-    {"id": "music",         "label": "Music",         "categories": ["art", "creative"],       "description": "Creative audio art form",            "confidence": "HIGH"},
-    {"id": "game",          "label": "Gaming",        "categories": ["hobby", "entertainment"],"description": "Video gaming as a hobby",           "confidence": "HIGH"},
-    {"id": "counter_strike","label": "Counter-Strike","categories": ["game", "fps"],          "description": "First-person shooter game by Valve","confidence": "HIGH"}
+    {"id": "leo",           "label": "leo",           "categories": ["person"],                "description": "Subject of this context",             "confidence": "HIGH"},
+    {"id": "guitar",        "label": "Guitar",        "categories": ["instrument", "music"],   "description": "Stringed musical instrument",         "confidence": "HIGH"},
+    {"id": "music",         "label": "Music",         "categories": ["art", "creative"],       "description": "Creative audio art form",              "confidence": "HIGH"},
+    {"id": "game",          "label": "Gaming",        "categories": ["hobby"],                 "description": "Video gaming as a hobby",              "confidence": "HIGH"},
+    {"id": "counter_strike","label": "Counter-Strike","categories": ["game", "fps", "shooter"],"description": "First-person shooter game by Valve",   "confidence": "HIGH"}
   ],
   "edges": [
     {"source": "leo",           "target": "guitar",        "predicate": "PLAYS",         "taxonomyType": "EVENT",      "confidence": "HIGH",   "context": "leo plays guitar",                               "conditions": []},
-    {"source": "leo",           "target": "music",         "predicate": "CREATES",       "taxonomyType": "EVENT",      "confidence": "HIGH",   "context": "leo creates music occasionally",                  "conditions": []},
+    {"source": "leo",           "target": "music",         "predicate": "CREATES",       "taxonomyType": "EVENT",      "confidence": "HIGH",   "context": "leo creates music",                              "conditions": []},
     {"source": "leo",           "target": "game",          "predicate": "LIKES",         "taxonomyType": "PREFERENCE", "confidence": "HIGH",   "context": "leo enjoys gaming",                              "conditions": []},
     {"source": "leo",           "target": "counter_strike","predicate": "PLAYS",         "taxonomyType": "EVENT",      "confidence": "HIGH",   "context": "leo plays Counter-Strike, which is a shooter game","conditions": []},
-    {"source": "counter_strike","target": "game",          "predicate": "SUBCATEGORY_OF","taxonomyType": "STATE",      "confidence": "MEDIUM", "context": "Counter-Strike is a shooter game",               "conditions": []}
+    {"source": "counter_strike","target": "game",          "predicate": "SUBCATEGORY_OF","taxonomyType": "STATE",      "confidence": "MEDIUM", "context": "Counter-Strike is a shooter game",                "conditions": []}
   ]
 }
 
-Note: Both "game" and "counter_strike" are NEW in this batch (Existing Graph is empty).
-SUBCATEGORY_OF is still created because Rule 8 applies to same-batch nodes too.
-This is the critical case — do NOT skip SUBCATEGORY_OF just because Y is also new.
-"creates music" → CREATES (EVENT), not INTERESTED_IN. "plays guitar" → PLAYS, not LIKES.
+Note: "game" and "counter_strike" are both new — SUBCATEGORY_OF is still required (Rule 5).
+"creates music" → CREATES not LIKES. "plays guitar" → PLAYS not LIKES. (Rule 4)
 
 ---
 
-## Example 2 — Conditional preferences: LIKES and DISLIKES coexist for the same entity
+## Example 2 — Conditional preferences, LIKES and DISLIKES coexist
 
 Context Boundary Subject: james
 Existing Graph: (empty)
@@ -179,73 +154,75 @@ james dislikes tea when it is cold.
 
 {
   "nodes": [
-    {"id": "james",           "label": "james",           "categories": ["person"],                    "description": "Subject of this context",            "confidence": "HIGH"},
-    {"id": "coffee",          "label": "Coffee",          "categories": ["beverage"],                  "description": "Hot caffeinated beverage",            "confidence": "HIGH"},
-    {"id": "sugar",           "label": "Sugar",           "categories": ["food", "ingredient"],        "description": "Sweet ingredient",                   "confidence": "HIGH"},
-    {"id": "tea",             "label": "Tea",             "categories": ["beverage"],                  "description": "Brewed beverage from leaves",         "confidence": "HIGH"},
-    {"id": "cold_temperature","label": "Cold",            "categories": ["state", "temperature"],      "description": "Low temperature state",               "confidence": "HIGH"}
+    {"id": "james",           "label": "james","categories": ["person"],              "description": "Subject of this context",  "confidence": "HIGH"},
+    {"id": "coffee",          "label": "Coffee","categories": ["beverage"],            "description": "Hot caffeinated beverage", "confidence": "HIGH"},
+    {"id": "sugar",           "label": "Sugar", "categories": ["food", "ingredient"], "description": "Sweet ingredient",          "confidence": "HIGH"},
+    {"id": "tea",             "label": "Tea",   "categories": ["beverage"],            "description": "Brewed beverage",           "confidence": "HIGH"},
+    {"id": "cold_temperature","label": "Cold",  "categories": ["state", "temperature"],"description": "Low temperature state",    "confidence": "HIGH"}
   ],
   "edges": [
-    {"source": "james", "target": "coffee",          "predicate": "LIKES",    "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "james loves coffee",                          "conditions": []},
-    {"source": "james", "target": "coffee",          "predicate": "DISLIKES", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "james dislikes coffee when it contains sugar", "conditions": ["sugar"]},
-    {"source": "james", "target": "tea",             "predicate": "DISLIKES", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "james dislikes tea when it is cold",           "conditions": ["cold_temperature"]}
+    {"source": "james","target": "coffee","predicate": "LIKES",   "taxonomyType": "PREFERENCE","confidence": "HIGH","context": "james loves coffee",                         "conditions": []},
+    {"source": "james","target": "coffee","predicate": "DISLIKES","taxonomyType": "PREFERENCE","confidence": "HIGH","context": "james dislikes coffee when it contains sugar","conditions": ["sugar"]},
+    {"source": "james","target": "tea",   "predicate": "DISLIKES","taxonomyType": "PREFERENCE","confidence": "HIGH","context": "james dislikes tea when it is cold",          "conditions": ["cold_temperature"]}
   ]
 }
 
 ---
 
-## Example 3 — Events, locations, and merging with an existing graph
+## Example 3 — Existing graph merge, past state, professional hierarchy
 
 Context Boundary Subject: carlos
 Existing Graph:
-  nodes: [{id: "carlos", ...}, {id: "french_cuisine", label: "French Cuisine", ...}]
-  edges: [{source: "carlos", target: "french_cuisine", predicate: "SPECIALIZES_IN", conditions: []}]
+  nodes: [{id: "carlos",...}, {id: "cuisine", label: "Cuisine",...}]
+  edges: [{source: "carlos", target: "cuisine", predicate: "SPECIALIZES_IN", conditions: []}]
 New Note:
 carlos attended a culinary masterclass in Tokyo.
-carlos is now also interested in Japanese cuisine.
-carlos won a regional cooking competition.
+carlos previously worked at a hotel kitchen.
+carlos now specialises in Japanese cuisine.
 
 {
   "nodes": [
-    {"id": "carlos",              "label": "carlos",                "categories": ["person", "chef"],          "description": "Professional chef",                         "confidence": "HIGH"},
-    {"id": "culinary_masterclass","label": "Culinary Masterclass",  "categories": ["event", "education"],      "description": "A professional cooking masterclass",         "confidence": "HIGH"},
-    {"id": "tokyo",               "label": "Tokyo",                 "categories": ["city", "location"],        "description": "Capital city of Japan",                     "confidence": "HIGH"},
-    {"id": "japanese_cuisine",    "label": "Japanese Cuisine",      "categories": ["cuisine", "food"],         "description": "Traditional Japanese cooking style",         "confidence": "HIGH"},
-    {"id": "cooking_competition", "label": "Cooking Competition",   "categories": ["event", "competition"],    "description": "A competitive cooking event",                "confidence": "HIGH"}
+    {"id": "carlos",              "label": "carlos",              "categories": ["person", "chef"],  "description": "Professional chef",                    "confidence": "HIGH"},
+    {"id": "culinary_masterclass","label": "Culinary Masterclass","categories": ["event","education"],"description": "A professional cooking masterclass",   "confidence": "HIGH"},
+    {"id": "tokyo",               "label": "Tokyo",               "categories": ["city","location"], "description": "Capital city of Japan",                "confidence": "HIGH"},
+    {"id": "hotel_kitchen",       "label": "Hotel Kitchen",       "categories": ["workplace"],       "description": "Commercial kitchen in a hotel",        "confidence": "HIGH"},
+    {"id": "japanese_cuisine",    "label": "Japanese Cuisine",    "categories": ["cuisine","food"],  "description": "Traditional Japanese cooking style",   "confidence": "HIGH"}
   ],
   "edges": [
-    {"source": "carlos",              "target": "culinary_masterclass","predicate": "ATTENDED",     "taxonomyType": "EVENT",      "confidence": "HIGH", "context": "carlos attended a culinary masterclass in Tokyo", "conditions": []},
-    {"source": "culinary_masterclass","target": "tokyo",               "predicate": "LOCATED_IN",   "taxonomyType": "STATE",      "confidence": "HIGH", "context": "carlos attended a culinary masterclass in Tokyo", "conditions": []},
-    {"source": "carlos",              "target": "japanese_cuisine",    "predicate": "INTERESTED_IN", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "carlos is now also interested in Japanese cuisine","conditions": []},
-    {"source": "carlos",              "target": "cooking_competition", "predicate": "WON",           "taxonomyType": "EVENT",      "confidence": "HIGH", "context": "carlos won a regional cooking competition",       "conditions": []}
+    {"source": "carlos",              "target": "culinary_masterclass","predicate": "ATTENDED",          "taxonomyType": "EVENT", "confidence": "HIGH",   "context": "carlos attended a culinary masterclass in Tokyo",     "conditions": []},
+    {"source": "culinary_masterclass","target": "tokyo",               "predicate": "LOCATED_IN",        "taxonomyType": "STATE", "confidence": "HIGH",   "context": "carlos attended a culinary masterclass in Tokyo",     "conditions": []},
+    {"source": "carlos",              "target": "hotel_kitchen",       "predicate": "PREVIOUSLY_WORKED_AT","taxonomyType": "STATE","confidence": "HIGH",  "context": "carlos previously worked at a hotel kitchen",         "conditions": []},
+    {"source": "carlos",              "target": "japanese_cuisine",    "predicate": "SPECIALIZES_IN",    "taxonomyType": "STATE", "confidence": "HIGH",   "context": "carlos now specialises in Japanese cuisine",          "conditions": []},
+    {"source": "japanese_cuisine",    "target": "cuisine",             "predicate": "SUBCATEGORY_OF",    "taxonomyType": "STATE", "confidence": "MEDIUM", "context": "japanese cuisine is a type of cuisine",              "conditions": []}
   ]
 }
 
-Note: "french_cuisine" node and its SPECIALIZES_IN edge are NOT in the output because they
-already exist in the graph — only new or updated nodes/edges are returned.
+Note: "cuisine" already exists — japanese_cuisine gets SUBCATEGORY_OF linking it in (Rule 5).
+"previously worked at" → PREVIOUSLY_WORKED_AT not WORKS_AT (Rule 4 temporal).
+Existing SPECIALIZES_IN(cuisine) not repeated — only new/updated edges returned (Rule graph merging).
 
 ---
 
-## Example 4 — Singular preference supersession (FAVORITE changes)
+## Example 4 — Preference supersession (FAVORITE changes)
 
 Context Boundary Subject: nina
 Existing Graph:
-  nodes: [{id: "nina", ...}, {id: "javascript", label: "JavaScript", ...}]
+  nodes: [{id: "nina",...}, {id: "javascript", label: "JavaScript",...}]
   edges: [{source: "nina", target: "javascript", predicate: "FAVORITE", conditions: []}]
 New Note:
-nina's favorite programming language is now TypeScript, not JavaScript anymore.
+nina's favourite language is now TypeScript, not JavaScript anymore.
 
 {
   "nodes": [
-    {"id": "nina",       "label": "nina",       "categories": ["person"],                         "description": "Subject of this context",              "confidence": "HIGH"},
-    {"id": "typescript", "label": "TypeScript",  "categories": ["programming_language"],           "description": "Statically typed superset of JavaScript","confidence": "HIGH"}
+    {"id": "nina",      "label": "nina",      "categories": ["person"],                "description": "Subject of this context",                "confidence": "HIGH"},
+    {"id": "typescript","label": "TypeScript","categories": ["programming_language"],  "description": "Statically typed superset of JavaScript","confidence": "HIGH"}
   ],
   "edges": [
-    {"source": "nina", "target": "typescript", "predicate": "FAVORITE", "taxonomyType": "PREFERENCE", "confidence": "HIGH", "context": "nina's favorite programming language is now TypeScript", "conditions": []}
+    {"source": "nina","target": "typescript","predicate": "FAVORITE","taxonomyType": "PREFERENCE","confidence": "HIGH","context": "nina's favourite language is now TypeScript","conditions": []}
   ]
 }
 
-Note: The new FAVORITE for "typescript" (conditions: []) supersedes the old FAVORITE for
-"javascript" (conditions: []) because FAVORITE is singular and both share the same condition set.
-The backend will remove the old edge automatically.
+Note: New FAVORITE(typescript, conditions:[]) supersedes old FAVORITE(javascript, conditions:[])
+because FAVORITE is a singular preference and both share the same empty condition set.
+The backend removes the superseded edge automatically.
 
