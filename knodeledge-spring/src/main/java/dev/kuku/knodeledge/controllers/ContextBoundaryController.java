@@ -1,10 +1,10 @@
 package dev.kuku.knodeledge.controllers;
 
-import dev.kuku.knodeledge.models.CreateContextBoundaryBody;
+import dev.kuku.knodeledge.controllers.models.CreateContextBoundaryBody;
 import dev.kuku.knodeledge.services.context_boundary.ContextBoundaryService;
 import dev.kuku.knodeledge.services.context_boundary.dto.ContextBoundary;
 import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
-import dev.kuku.knodeledge.infra.Traced;
+import dev.kuku.knodeledge.infra.topo_tracer.Traced;
 import dev.kuku.topotracer.sdk.Tracer;
 
 import lombok.RequiredArgsConstructor;

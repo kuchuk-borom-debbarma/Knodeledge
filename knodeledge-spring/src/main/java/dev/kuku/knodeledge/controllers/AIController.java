@@ -1,11 +1,9 @@
 package dev.kuku.knodeledge.controllers;
 
 import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
-import dev.kuku.knodeledge.infra.Traced;
-import dev.kuku.knodeledge.models.IngestBody;
-
+import dev.kuku.knodeledge.infra.topo_tracer.Traced;
+import dev.kuku.knodeledge.controllers.models.IngestNoteBody;
 import dev.kuku.knodeledge.services.ai.AIService;
-import dev.kuku.knodeledge.services.ai.dto.Kgraph;
 import dev.kuku.topotracer.sdk.Tracer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,15 +17,18 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Slf4j
 public class AIController {
-    final AIService aiService;
-    final Tracer tracer;
+    private final AIService aiService;
+    private final Tracer tracer;
 
-    @PostMapping("/")
-    @Traced(value = "aiService-controller.ingest-notes", type = KnodeledgeImportanceLevel.CONTROLLER)
-    public ResponseEntity<Kgraph> ingestNotes(@RequestBody IngestBody body) {
-        log.info("ingestNotes endpoint hit: {}", body);
-        tracer.log("ingestNotes endpoint hit", Map.of("notesCount", String.valueOf(body.notes().size())));
-        Kgraph graph = aiService.generateLocalGraphFromNotes(body.notes());
-        return ResponseEntity.ok(graph);
+    @PostMapping("/ingest")
+    @Traced(value = "aiService-controller.ingest-note", type = KnodeledgeImportanceLevel.CONTROLLER)
+    public ResponseEntity<Void> ingestNote(@RequestBody IngestNoteBody body) {
+        log.info("ingestNote endpoint hit: {}", body);
+        tracer.log("ingestNote endpoint hit", Map.of(
+            "contextBoundaryId", body.contextBoundaryId(),
+            "actorId", body.actorId()
+        ));
+        aiService.ingestNote(body.note(), body.contextBoundaryId(), body.actorId());
+        return ResponseEntity.ok().build();
     }
 }

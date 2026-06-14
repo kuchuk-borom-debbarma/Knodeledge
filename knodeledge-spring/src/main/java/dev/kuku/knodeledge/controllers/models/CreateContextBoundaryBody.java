@@ -1,4 +1,4 @@
-package dev.kuku.knodeledge.models;
+package dev.kuku.knodeledge.controllers.models;
 
 public record CreateContextBoundaryBody(String name, String context) {
 }

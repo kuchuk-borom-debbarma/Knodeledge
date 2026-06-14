@@ -1,34 +1,33 @@
 package dev.kuku.knodeledge.services.ai.internal;
 
 import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
-import dev.kuku.knodeledge.infra.Traced;
-
+import dev.kuku.knodeledge.infra.topo_tracer.Traced;
 import dev.kuku.knodeledge.services.ai.AIService;
-import dev.kuku.knodeledge.services.ai.dto.Kedge;
-import dev.kuku.knodeledge.services.ai.dto.Kgraph;
-import dev.kuku.knodeledge.services.ai.dto.Knode;
-import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
+import dev.kuku.knodeledge.services.context_boundary.ContextBoundaryService;
+import dev.kuku.knodeledge.services.graph.GraphService;
 import dev.kuku.topotracer.sdk.Tracer;
 import io.netty.util.internal.StringUtil;
+import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.concurrent.CompletableFuture;
+
+import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.IngestionResponse;
+import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.NodeDto;
+import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.EdgeDto;
 
 /**
  * LLM focused AIService work-flow
  */
 @Service
+@RequiredArgsConstructor
 public class LLMAIService implements AIService {
 
     private final Tracer tracer;
     private final ChatClient chatClient;
-
-    public LLMAIService(Tracer tracer, ChatClient.Builder chatClientBuilder) {
-        this.tracer = tracer;
-        this.chatClient = chatClientBuilder.build();
-    }
+    private final ContextBoundaryService contextBoundaryService;
+    private final GraphService graphService;
 
     private final String nodeEdgePrompt = """
             You are a highly precise Knowledge Graph Extraction Engine. Your task is to analyze raw text notes, extract static concepts (entities), and map the relationships (edges) between them.
@@ -40,59 +39,137 @@ public class LLMAIService implements AIService {
             4. CONTEXT ANCHORING: For every edge, populate the 'context' field with the exact sentence from the notes.
             """;
 
+    private final String ingestNotePrompt = """
+            You are a State-Aware Knowledge Graph Extraction Engine.
+            Your task is to analyze a new raw text note and extract new nodes (entities) and edges (relationships), aligning them with the existing knowledge graph in this context.
+            
+            Rules:
+            1. FUZZY SEMANTIC ALIGNING: Compare extracted entities with existing nodes in the provided graph. Reuse existing node IDs if they refer to the same entity (e.g., if the note says "Apple fruit" and "apple" exists, reuse ID "apple").
+            2. CATEGORIZATION & HIERARCHY: For any new node, infer its categories/parent concepts using "IS_A" relationship edges (e.g. "hiking" -> IS_A -> "outdoor_activity").
+            3. RELATIONSHIP TAXONOMY: Categorize every relationship (edge) into one of these types:
+               - EVENT: Transient or point-in-time actions (e.g., WENT_HIKING, BOUGHT_BOOTS).
+               - PREFERENCE: Likes, favorites, or opinions that change over time (e.g., FAVORITE_FRUIT, LIKES).
+               - STATE: Semi-permanent attributes or properties that assert truth values (e.g., IS_VEGETARIAN, ALLERGIC_TO).
+            4. CONFIDENCE SCORING: Assign a confidence level (HIGH, MEDIUM, LOW) to each extracted node and edge based on how clearly and directly it is stated in the note.
+            5. CONTEXT ANCHORING: Populate the 'context' field of every edge with the exact sentence from the note supporting that edge.
+            """;
+
     /**
-     * LLM Focused solution for generating local graph. <br>
-     * 1. Generate Local Graph
-     * 2.
+     * Phase 1:- Feed the entire context + existing graph(s) + note.
      */
-    @Traced(value = "ai.process-notes", type = KnodeledgeImportanceLevel.SERVICE)
-    public Kgraph generateLocalGraphFromNotes(ArrayList<String> notes) {
-        tracer.log("LLM focused Local Graph Generator");
-        if (notes == null || notes.isEmpty()) {
-            return new Kgraph(List.of(), List.of());
-        }
-
-        // 1. Join all notes into a single context block
-        String notesContent = String.join("\n---\n", notes);
-        // 2. Define prompt template and extract structured graph
-        GraphResponse graph = chatClient.prompt()
-                .system(this.nodeEdgePrompt)
-                .user("Analyze the following notes:\n" + notesContent)
-                .call()
-                .entity(GraphResponse.class);
-
-        if (graph == null) {
-            throw new RuntimeException("Failed to generate local graph");
-        }
-        tracer.log("Successfully extracted knowledge graph", java.util.Map.of(
-                "nodesCount", String.valueOf(graph.nodes().size()),
-                "edgesCount", String.valueOf(graph.edges().size())
-        ));
-
-        for (var node : graph.nodes()) {
-            tracer.log("Extracted Node: " + node.label() + " [" + node.category() + "]");
-        }
-        for (var edge : graph.edges()) {
-            tracer.log("Extracted Edge: " + edge.source() + " -" + edge.predicate() + "-> " + edge.target());
-        }
-
-        List<Knode> kNodes = graph.nodes().stream()
-                .map(n -> new Knode(n.id(), n.label(), n.category(), n.description()))
-                .toList();
-        List<Kedge> kEdges = graph.edges().stream()
-                .map(e -> new Kedge(e.source(), e.target(), e.predicate(), e.context()))
-                .toList();
-
-        return new Kgraph(kNodes, kEdges);
-    }
-
-    @Traced(value = "ai.ingest-note", type = KnodeledgeImportanceLevel.METHOD)
+    @Traced(value = "ai.ingest-note", type = KnodeledgeImportanceLevel.SERVICE)
     @Override
-    public void ingestNote(String note) {
+    public void ingestNote(String note, String contextBoundaryId, String actorId) {
+        tracer.log("IngestNote " + note + " within " + contextBoundaryId + " for " + actorId);
         if (StringUtil.isNullOrEmpty(note)) {
             tracer.log("Note is null or empty!");
         }
+        //TODO how to use topo tracer nicely here? I want to show parent having 2 children to contextOp trace and one to graphOp trace but challenge is how to represent join? next trace log will have 2 parent?
+
+        // Retrieve context and graph in parallel
+        var contextOp = CompletableFuture.supplyAsync(() -> contextBoundaryService.getContextBoundaryById(contextBoundaryId, actorId));
+        var graphOp = CompletableFuture.supplyAsync(() -> graphService.getCompleteGraphByBoundaryId(contextBoundaryId, actorId));
+        CompletableFuture.allOf(contextOp, graphOp).join();
+        var context = contextOp.join();
+        var graph = graphOp.join();
+
+        //Feed into LLM
+        IngestionResponse response = chatClient.prompt()
+                .system(this.ingestNotePrompt)
+                .user(String.format("""
+                        Context Boundary:
+                        Name: %s
+                        Description: %s
+                        
+                        Existing Graph:
+                        %s
+                        
+                        New Note:
+                        %s
+                        """, context.name(), context.context(), graph, note))
+                .call()
+                .entity(IngestionResponse.class);
+
+        if (response == null) {
+            throw new RuntimeException("Failed to ingest note and generate graph updates");
+        }
+
+        tracer.log("Successfully processed note ingestion", java.util.Map.of(
+                "extractedNodesCount", String.valueOf(response.nodes().size()),
+                "extractedEdgesCount", String.valueOf(response.edges().size())
+        ));
+
+        for (var node : response.nodes()) {
+            tracer.log("Extracted Candidate Node: " + node.label() + " (" + node.confidence() + ")");
+        }
+        for (var edge : response.edges()) {
+            tracer.log("Extracted Candidate Edge: " + edge.source() + " -" + edge.predicate() + "-> " + edge.target() + " (" + edge.taxonomyType() + ", " + edge.confidence() + ")");
+        }
+
+        // 1. Merge Nodes
+        java.util.Map<String, NodeDto> mergedNodes = new java.util.LinkedHashMap<>();
+        for (var node : graph.nodes()) {
+            mergedNodes.put(node.id(), node);
+        }
+        for (var extNode : response.nodes()) {
+            mergedNodes.put(extNode.id(), new NodeDto(
+                extNode.id(),
+                extNode.label(),
+                extNode.category(),
+                extNode.description()
+            ));
+        }
+
+        // 2. Merge Edges (with Preference Supersession)
+        java.util.List<EdgeDto> activeEdges = new java.util.ArrayList<>();
+        java.util.List<dev.kuku.knodeledge.services.ai.internal.models.GraphDto.ExtractedEdgeDto> newPreferences = new java.util.ArrayList<>();
+        java.util.List<dev.kuku.knodeledge.services.ai.internal.models.GraphDto.ExtractedEdgeDto> newEventsAndStates = new java.util.ArrayList<>();
+
+        for (var edge : response.edges()) {
+            if ("PREFERENCE".equalsIgnoreCase(edge.taxonomyType())) {
+                newPreferences.add(edge);
+            } else {
+                newEventsAndStates.add(edge);
+            }
+        }
+
+        // Process existing edges
+        for (var existingEdge : graph.edges()) {
+            boolean superseded = false;
+            for (var newPref : newPreferences) {
+                if (existingEdge.source().equals(newPref.source()) && existingEdge.predicate().equals(newPref.predicate())) {
+                    superseded = true;
+                    tracer.log("Edge superseded (Preference change): " + existingEdge.source() + " -" + existingEdge.predicate() + "-> " + existingEdge.target() + " replaced by " + newPref.target());
+                    break;
+                }
+            }
+            if (!superseded) {
+                activeEdges.add(existingEdge);
+            }
+        }
+
+        // Add new preferences
+        for (var newPref : newPreferences) {
+            activeEdges.add(new EdgeDto(
+                newPref.source(),
+                newPref.target(),
+                newPref.predicate(),
+                newPref.context()
+            ));
+        }
+
+        // Add new events and states
+        for (var edge : newEventsAndStates) {
+            activeEdges.add(new EdgeDto(
+                edge.source(),
+                edge.target(),
+                edge.predicate(),
+                edge.context()
+            ));
+        }
+
+        // 3. Save to database
+        graphService.saveGraph(contextBoundaryId, new java.util.ArrayList<>(mergedNodes.values()), activeEdges);
+        tracer.log("Saved updated graph to database for boundary: " + contextBoundaryId);
     }
 }
-
-

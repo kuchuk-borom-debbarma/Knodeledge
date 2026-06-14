@@ -1,4 +1,4 @@
-package dev.kuku.knodeledge.models;
+package dev.kuku.knodeledge.controllers.models;
 
 import java.util.ArrayList;
 

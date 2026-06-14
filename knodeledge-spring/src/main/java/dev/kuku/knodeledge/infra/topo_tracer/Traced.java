@@ -1,6 +1,5 @@
-package dev.kuku.knodeledge.infra;
+package dev.kuku.knodeledge.infra.topo_tracer;
 
-import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
 import java.lang.annotation.ElementType;
 
 import java.lang.annotation.Retention;
