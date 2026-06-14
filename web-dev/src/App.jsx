@@ -97,46 +97,49 @@ function App() {
       const visNodes = graphData.nodes.map(n => ({
         id: n.id,
         label: n.label,
-        title: `${n.label} (${(n.categories || []).join(', ') || 'Concept'})\n${n.description || ''}`,
+        title: `${n.label}\n[${(n.categories || []).join(', ') || 'concept'}]\n${n.description || ''}`,
         color: getNodeColor(n.categories),
-        font: { color: '#ffffff', face: 'Inter', size: 13, bold: true },
+        font: { color: '#ffffff', face: 'Inter', size: 14, bold: true },
         borderWidth: 2,
-        shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 4 },
+        shadow: { enabled: true, color: 'rgba(0,0,0,0.5)', size: 6 },
         shape: 'dot',
-        size: 18
+        size: 22
       }));
 
       const visEdges = graphData.edges.map((e, idx) => {
-        const isConditional = e.predicate !== 'CONDITIONED_BY' && e.conditions && e.conditions.length > 0;
-        const conditionSuffix = isConditional ? ` [when: ${e.conditions.join(', ')}]` : '';
+        const isConditioned = e.predicate !== 'CONDITIONED_BY' && e.conditions && e.conditions.length > 0;
+        const isCondBy     = e.predicate === 'CONDITIONED_BY';
+        // For conditional edges, show the condition inline on the label
+        const edgeLabel = isConditioned
+          ? `${e.predicate}\n[if: ${e.conditions.join(', ')}]`
+          : e.predicate;
         return {
           id: `edge-${idx}`,
           from: e.source,
           to: e.target,
-          label: e.predicate,
-          title: isConditional
-            ? `${e.predicate}\nConditioned by: ${e.conditions.join(', ')}\n${e.context || ''}`
-            : (e.context || e.predicate),
-          arrows: 'to',
+          label: edgeLabel,
+          title: e.context || e.predicate,
+          arrows: { to: { enabled: true, scaleFactor: 0.6 } },
           font: {
-            color: isConditional ? '#f59e0b' : '#9ca3af',
+            color: isConditioned || isCondBy ? '#f59e0b' : '#e2e8f0',
             align: 'horizontal',
-            size: 10,
+            size: 12,
             face: 'Inter',
-            background: 'rgba(15, 17, 26, 0.95)',
+            bold: isConditioned,
+            background: 'rgba(10, 12, 20, 0.85)',
             strokeWidth: 0
           },
           color: {
-            color: e.predicate === 'CONDITIONED_BY' ? 'rgba(245,158,11,0.35)'
-                  : isConditional ? 'rgba(245,158,11,0.5)'
-                  : 'rgba(255,255,255,0.15)',
-            hover: '#8b5cf6',
+            color: isCondBy       ? 'rgba(245,158,11,0.4)'
+                 : isConditioned  ? 'rgba(245,158,11,0.7)'
+                 : 'rgba(255,255,255,0.45)',
+            hover: '#a78bfa',
             highlight: '#8b5cf6'
           },
-          dashes: e.predicate === 'CONDITIONED_BY',
-          width: 1.5,
-          shadow: { enabled: true, color: 'rgba(0,0,0,0.3)', size: 3 },
-          smooth: { type: 'cubicBezier', roundness: 0.4 }
+          dashes: isCondBy ? [6, 4] : false,
+          width: isConditioned || isCondBy ? 2 : 1.5,
+          shadow: { enabled: true, color: 'rgba(0,0,0,0.4)', size: 4 },
+          smooth: { type: 'curvedCW', roundness: 0.2 }
         };
       });
 
@@ -144,18 +147,27 @@ function App() {
       const options = {
         physics: {
           forceAtlas2Based: {
-            gravitationalConstant: -70,
-            centralGravity: 0.02,
-            springLength: 120,
-            springConstant: 0.08
+            gravitationalConstant: -120,
+            centralGravity: 0.01,
+            springLength: 200,
+            springConstant: 0.05,
+            damping: 0.4
           },
           solver: 'forceAtlas2Based',
-          stabilization: { iterations: 100 }
+          stabilization: { iterations: 200, updateInterval: 25 },
+          minVelocity: 0.75
         },
         interaction: {
           hover: true,
-          selectConnectedEdges: false,
-          tooltipDelay: 200
+          selectConnectedEdges: true,
+          tooltipDelay: 150,
+          navigationButtons: true,
+          keyboard: true,
+          zoomView: true
+        },
+        edges: {
+          // Global edge label settings (per-edge font overrides these)
+          labelHighlightBold: true
         }
       };
 
