@@ -5,6 +5,7 @@ import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.NodeDto;
 import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.EdgeRef;
 import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.GraphPatch;
+import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.OntologyResponse;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -29,6 +30,84 @@ public class GraphPatchProcessor {
             "NOT",
             "CONDITION_SUBJECT"
         );
+
+    public GraphPatch completeReferences(
+        GraphResponse existingGraph,
+        GraphPatch correctedPatch,
+        GraphPatch candidatePatch,
+        OntologyResponse ontology
+    ) {
+        requireNonNullPatch(correctedPatch);
+
+        Map<String, NodeDto> existingNodes = nodesById(existingGraph.nodes());
+        Map<String, NodeDto> availableNodes = new LinkedHashMap<>();
+        putNodes(availableNodes, ontology == null ? null : ontology.nodes());
+        putNodes(availableNodes, candidatePatch == null ? null : candidatePatch.upsertNodes());
+        putNodes(availableNodes, correctedPatch.upsertNodes());
+
+        Map<String, EdgeDto> availableEdges = new LinkedHashMap<>();
+        putEdges(availableEdges, ontology == null ? null : ontology.edges());
+        putEdges(availableEdges, candidatePatch == null ? null : candidatePatch.upsertEdges());
+        putEdges(availableEdges, correctedPatch.upsertEdges());
+
+        Map<String, NodeDto> completedNodes = new LinkedHashMap<>();
+        putNodes(completedNodes, correctedPatch.upsertNodes());
+        Map<String, EdgeDto> completedEdges = new LinkedHashMap<>();
+        putEdges(completedEdges, correctedPatch.upsertEdges());
+        Set<String> deletedNodeIds = new HashSet<>(list(correctedPatch.deleteNodes()));
+
+        List<String> requiredNodeIds = new ArrayList<>();
+        for (var edge : completedEdges.values()) {
+            requiredNodeIds.add(edge.source());
+            requiredNodeIds.add(edge.target());
+        }
+        Set<String> processedNodeIds = new HashSet<>();
+
+        for (int index = 0; index < requiredNodeIds.size(); index++) {
+            String nodeId = requiredNodeIds.get(index);
+            if (deletedNodeIds.contains(nodeId)
+                || existingNodes.containsKey(nodeId)
+                || !processedNodeIds.add(nodeId)) {
+                continue;
+            }
+
+            NodeDto node = completedNodes.getOrDefault(nodeId, availableNodes.get(nodeId));
+            if (node == null) {
+                throw new IllegalArgumentException(
+                    "Validated patch references node with no definition: " + nodeId
+                );
+            }
+            completedNodes.putIfAbsent(nodeId, normalizeNode(node));
+
+            for (var categoryId : list(node.categories())) {
+                requiredNodeIds.add(categoryId);
+                String categoryEdgeKey = findCategoryEdgeKey(
+                    nodeId,
+                    categoryId,
+                    existingGraph.edges(),
+                    completedEdges.values(),
+                    availableEdges.values()
+                );
+                if (categoryEdgeKey == null) {
+                    throw new IllegalArgumentException(
+                        "No taxonomy edge available for category cache: "
+                            + nodeId + " -> " + categoryId
+                    );
+                }
+                EdgeDto categoryEdge = availableEdges.get(categoryEdgeKey);
+                if (categoryEdge != null) {
+                    completedEdges.putIfAbsent(categoryEdgeKey, categoryEdge);
+                }
+            }
+        }
+
+        return new GraphPatch(
+            new ArrayList<>(completedNodes.values()),
+            new ArrayList<>(completedEdges.values()),
+            list(correctedPatch.deleteNodes()),
+            list(correctedPatch.deleteEdges())
+        );
+    }
 
     public GraphResponse apply(GraphResponse existingGraph, GraphPatch patch) {
         requireNonNullPatch(patch);
@@ -282,6 +361,50 @@ public class GraphPatchProcessor {
             List.copyOf(list(node.categories())),
             node.description()
         );
+    }
+
+    private Map<String, NodeDto> nodesById(List<NodeDto> nodes) {
+        Map<String, NodeDto> result = new LinkedHashMap<>();
+        putNodes(result, nodes);
+        return result;
+    }
+
+    private void putNodes(Map<String, NodeDto> target, List<NodeDto> nodes) {
+        for (var node : list(nodes)) {
+            if (node != null && !isBlank(node.id())) {
+                target.put(node.id(), node);
+            }
+        }
+    }
+
+    private void putEdges(Map<String, EdgeDto> target, List<EdgeDto> edges) {
+        for (var edge : list(edges)) {
+            if (edge != null
+                && !isBlank(edge.source())
+                && !isBlank(edge.target())
+                && !isBlank(edge.predicate())) {
+                target.put(edgeKey(edge.source(), edge.target(), edge.predicate()), edge);
+            }
+        }
+    }
+
+    private String findCategoryEdgeKey(
+        String source,
+        String target,
+        List<EdgeDto> existingEdges,
+        java.util.Collection<EdgeDto> completedEdges,
+        java.util.Collection<EdgeDto> availableEdges
+    ) {
+        for (var edges : List.of(existingEdges, completedEdges, availableEdges)) {
+            for (var edge : edges) {
+                if (edge.source().equals(source)
+                    && edge.target().equals(target)
+                    && CATEGORY_PREDICATES.contains(edge.predicate())) {
+                    return edgeKey(edge.source(), edge.target(), edge.predicate());
+                }
+            }
+        }
+        return null;
     }
 
     private void validateNode(NodeDto node) {

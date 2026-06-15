@@ -5,6 +5,7 @@ import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.NodeDto;
 import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.EdgeRef;
 import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.GraphPatch;
+import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.OntologyResponse;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -67,6 +68,51 @@ class GraphPatchProcessorTests {
         );
 
         assertTrue(error.getMessage().contains("missing node"));
+    }
+
+    @Test
+    void restoresNodeDroppedByPatchValidator() {
+        var existing = new GraphResponse(
+            List.of(node("k", List.of())),
+            List.of()
+        );
+        var ontology = new OntologyResponse(
+            List.of(),
+            List.of(
+                node("yogurt", List.of("food")),
+                node("food", List.of())
+            ),
+            List.of(edge("yogurt", "food", "INSTANCE_OF"))
+        );
+        var candidate = new GraphPatch(
+            ontology.nodes(),
+            List.of(
+                edge("k", "yogurt", "LIKES"),
+                edge("yogurt", "food", "INSTANCE_OF")
+            ),
+            List.of(),
+            List.of()
+        );
+        var validatorPatch = new GraphPatch(
+            List.of(),
+            List.of(edge("k", "yogurt", "LIKES")),
+            List.of(),
+            List.of()
+        );
+
+        var completed = processor.completeReferences(
+            existing,
+            validatorPatch,
+            candidate,
+            ontology
+        );
+        var result = processor.apply(existing, completed);
+
+        assertEquals(
+            List.of("k", "yogurt", "food"),
+            result.nodes().stream().map(NodeDto::id).toList()
+        );
+        assertEquals(2, result.edges().size());
     }
 
     @Test

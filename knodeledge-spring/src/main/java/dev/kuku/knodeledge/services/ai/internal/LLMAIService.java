@@ -192,7 +192,13 @@ public class LLMAIService implements AIService {
             "issuesRepaired", String.valueOf(size(validation.issues()))
         ));
 
-        var finalGraph = graphPatchProcessor.apply(existingGraph, validation.correctedPatch());
+        var completedPatch = graphPatchProcessor.completeReferences(
+            existingGraph,
+            validation.correctedPatch(),
+            candidatePatch,
+            ontology
+        );
+        var finalGraph = graphPatchProcessor.apply(existingGraph, completedPatch);
         graphService.saveGraph(contextBoundaryId, finalGraph.nodes(), finalGraph.edges());
         tracer.log("Saved validated graph", Map.of(
             "boundaryId", contextBoundaryId,

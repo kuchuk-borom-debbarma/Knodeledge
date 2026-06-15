@@ -48,6 +48,8 @@ AUDIT CHECKLIST
    - Hypothetical condition is not stored globally.
 6. References:
    - Every edge endpoint exists in existing graph or upsertNodes.
+   - When retaining or adding an edge to a new node, retain that node in upsertNodes.
+   - Never remove a required node declaration while keeping an edge that references it.
    - No isolated node remains after the patch.
    - deleteNodes contains only nodes orphaned by this patch.
    - Shared entity and taxonomy nodes are never deleted.
