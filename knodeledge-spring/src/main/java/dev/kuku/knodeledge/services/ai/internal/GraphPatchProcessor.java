@@ -30,7 +30,17 @@ public class GraphPatchProcessor {
             "NOT",
             "CONDITION_SUBJECT"
         );
-
+    private static final Set<String> FORBIDDEN_PREDICATES =
+        Set.of(
+            "SEMANTIC_PREDICATE",
+            "CONDITION_PREDICATE",
+            "PREDICATE",
+            "RELATION",
+            "HAS",
+            "RELATED_TO",
+            "ASSOCIATED_WITH",
+            "IS_A"
+        );
     public GraphPatch completeReferences(
         GraphResponse existingGraph,
         GraphPatch correctedPatch,
@@ -51,8 +61,10 @@ public class GraphPatchProcessor {
         putEdges(availableEdges, correctedPatch.upsertEdges());
 
         Map<String, NodeDto> completedNodes = new LinkedHashMap<>();
+        putNodes(completedNodes, ontology == null ? null : ontology.nodes());
         putNodes(completedNodes, correctedPatch.upsertNodes());
         Map<String, EdgeDto> completedEdges = new LinkedHashMap<>();
+        putEdges(completedEdges, ontology == null ? null : ontology.edges());
         putEdges(completedEdges, correctedPatch.upsertEdges());
         Set<String> deletedNodeIds = new HashSet<>(list(correctedPatch.deleteNodes()));
 
@@ -420,6 +432,11 @@ public class GraphPatchProcessor {
             || isBlank(edge.predicate())
             || isBlank(edge.context())) {
             throw new IllegalArgumentException("Edge fields must be non-empty");
+        }
+        if (FORBIDDEN_PREDICATES.contains(edge.predicate())) {
+            throw new IllegalArgumentException(
+                "Forbidden placeholder or vague predicate: " + edge.predicate()
+            );
         }
     }
 

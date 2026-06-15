@@ -35,6 +35,7 @@ AUDIT CHECKLIST
    - Example chain remains traversable:
      rainbow_six_siege -> first_person_shooter -> game_genre
      rainbow_six_siege -> video_game -> game
+   - Specific type/genre leaves have reliable broader taxonomy links.
 4. Category cache:
    - Every category ID exists.
    - Every cache entry has matching INSTANCE_OF, HAS_GENRE, or GRAPH_ROLE edge.
@@ -46,6 +47,10 @@ AUDIT CHECKLIST
    - Condition has one GRAPH_ROLE, CONDITION_SUBJECT, and semantic predicate.
    - Nested AND/OR/NOT meaning matches semantic extraction exactly.
    - Hypothetical condition is not stored globally.
+   - Statement and condition semantic edges use actual extracted predicates.
+   - Reject and replace literal placeholders SEMANTIC_PREDICATE, CONDITION_PREDICATE,
+     PREDICATE, or RELATION.
+   - Reject vague predicates HAS, RELATED_TO, ASSOCIATED_WITH, and IS_A.
 6. References:
    - Every edge endpoint exists in existing graph or upsertNodes.
    - When retaining or adding an edge to a new node, retain that node in upsertNodes.

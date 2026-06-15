@@ -45,7 +45,7 @@ RULES
 8. Conditional assertion structure:
    statement --GRAPH_ROLE--> statement
    statement --STATEMENT_SUBJECT--> real subject
-   statement --SEMANTIC_PREDICATE--> real object
+   statement --<actual assertion predicate>--> real object
    statement --WHEN--> root condition group
 
    group --GRAPH_ROLE--> condition_group
@@ -53,7 +53,16 @@ RULES
 
    condition --GRAPH_ROLE--> condition
    condition --CONDITION_SUBJECT--> real condition subject
-   condition --CONDITION_PREDICATE--> real condition object
+   condition --<actual atomic-condition predicate>--> real condition object
+
+   Angle-bracket text above is notation only. Replace it with the exact predicate from semantic
+   extraction. Example:
+   statement --DISLIKES--> ice_cream
+   condition --CONTAINS--> dry_fruit
+
+   FORBIDDEN literal predicates:
+   SEMANTIC_PREDICATE, CONDITION_PREDICATE, PREDICATE, RELATION, HAS, RELATED_TO,
+   ASSOCIATED_WITH, IS_A.
 
 9. Create taxonomy nodes statement, condition_group, and condition with categories=[].
 10. Structural node categories cache:
@@ -85,4 +94,5 @@ RULES
 16. Edge identity is source + predicate + target.
 17. Every edge source and target must exist after applying this patch to the existing graph.
 18. No isolated node may remain.
-19. No prose, markdown, confidence fields, full graph snapshot, or extra keys.
+19. Every semantic edge must use the exact open-vocabulary predicate supplied by extraction.
+20. No prose, markdown, confidence fields, full graph snapshot, or extra keys.

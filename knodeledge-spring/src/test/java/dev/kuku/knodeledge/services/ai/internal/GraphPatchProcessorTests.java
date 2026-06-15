@@ -54,6 +54,23 @@ class GraphPatchProcessorTests {
     }
 
     @Test
+    void rejectsNewPlaceholderPredicate() {
+        var patch = new GraphPatch(
+            List.of(node("amelia", List.of()), node("coffee", List.of())),
+            List.of(edge("amelia", "coffee", "SEMANTIC_PREDICATE")),
+            List.of(),
+            List.of()
+        );
+
+        var error = assertThrows(
+            IllegalArgumentException.class,
+            () -> processor.apply(new GraphResponse(List.of(), List.of()), patch)
+        );
+
+        assertTrue(error.getMessage().contains("Forbidden placeholder"));
+    }
+
+    @Test
     void rejectsDanglingEdge() {
         var patch = new GraphPatch(
             List.of(node("amelia", List.of())),
@@ -80,9 +97,13 @@ class GraphPatchProcessorTests {
             List.of(),
             List.of(
                 node("yogurt", List.of("food")),
-                node("food", List.of())
+                node("food", List.of()),
+                node("consumable", List.of())
             ),
-            List.of(edge("yogurt", "food", "INSTANCE_OF"))
+            List.of(
+                edge("yogurt", "food", "INSTANCE_OF"),
+                edge("food", "consumable", "SUBCATEGORY_OF")
+            )
         );
         var candidate = new GraphPatch(
             ontology.nodes(),
@@ -109,10 +130,10 @@ class GraphPatchProcessorTests {
         var result = processor.apply(existing, completed);
 
         assertEquals(
-            List.of("k", "yogurt", "food"),
+            List.of("k", "yogurt", "food", "consumable"),
             result.nodes().stream().map(NodeDto::id).toList()
         );
-        assertEquals(2, result.edges().size());
+        assertEquals(3, result.edges().size());
     }
 
     @Test
@@ -192,4 +213,5 @@ class GraphPatchProcessorTests {
     private EdgeDto edge(String source, String target, String predicate) {
         return new EdgeDto(source, target, predicate, "Source context");
     }
+
 }

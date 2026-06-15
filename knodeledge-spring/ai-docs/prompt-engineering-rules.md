@@ -166,16 +166,18 @@ Required shape:
 
 ```text
 statement --STATEMENT_SUBJECT--> subject
-statement --<SEMANTIC_PREDICATE>--> object
+statement --<actual assertion predicate>--> object
 statement --WHEN--> condition_group
 condition_group --ALL_OF|ANY_OF|NOT--> condition_or_nested_group
 condition --CONDITION_SUBJECT--> condition_subject
-condition --<CONDITION_PREDICATE>--> condition_object
+condition --<actual condition predicate>--> condition_object
 ```
 
 The condition relation must not become a global fact. Composite entity nodes remain forbidden.
 Unconditional direct facts and conditional statement subgraphs may coexist.
 Structural nodes use GRAPH_ROLE edges. Boolean groups may nest for mixed AND, OR, and NOT logic.
+Angle-bracket text is notation, never a literal predicate. Prompts and validators must reject
+`SEMANTIC_PREDICATE`, `CONDITION_PREDICATE`, `PREDICATE`, and `RELATION`.
 
 ### 3.7 Traversable Taxonomy — Dedicated Rule
 

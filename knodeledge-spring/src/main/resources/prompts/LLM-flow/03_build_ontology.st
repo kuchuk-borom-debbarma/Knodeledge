@@ -45,15 +45,19 @@ RULES
    - SUBCATEGORY_OF: taxonomy node -> broader taxonomy node.
 7. Never use SUBCATEGORY_OF from a concrete instance.
 8. Never use INSTANCE_OF between taxonomy categories.
-9. Build enough hierarchy for useful traversal, from specific type/genre to stable broad concepts.
-   Stop at useful domain roots; do not create philosophical chains such as entity -> thing.
-10. Link all reliable, useful classifications. Avoid speculative or disputed claims.
-11. For non-taxonomy nodes, categories is a derived cache of direct INSTANCE_OF and HAS_GENRE
+9. Build hierarchy closure for useful traversal, from every specific direct type/genre to a
+   stable broad domain concept. A direct classification is incomplete when traversal stops at a
+   specific leaf despite a reliable broader category being known.
+10. Audit relevant existing ontology too. Repair missing hierarchy links for existing nodes
+    encountered in the graph, even when those nodes were not created by this note.
+11. Stop at useful domain roots; do not create philosophical chains such as entity -> thing.
+12. Link all reliable, useful classifications. Avoid speculative or disputed claims.
+13. For non-taxonomy nodes, categories is a derived cache of direct INSTANCE_OF and HAS_GENRE
     targets. Every cached ID must have a matching edge.
-12. Taxonomy nodes use categories=[].
-13. Preserve existing useful taxonomy and canonical IDs.
-14. Output ontology only. Do not output personal/event/preference edges or condition structures.
-15. No prose, markdown, confidence fields, or extra keys.
+14. Taxonomy nodes use categories=[].
+15. Preserve existing useful taxonomy and canonical IDs.
+16. Output ontology only. Do not output personal/event/preference edges or condition structures.
+17. No prose, markdown, confidence fields, or extra keys.
 
 REQUIRED EXAMPLE
 
@@ -64,3 +68,4 @@ first_person_shooter --SUBCATEGORY_OF--> game_genre
 video_game --SUBCATEGORY_OF--> game
 
 Do not emit rainbow_six_siege --SUBCATEGORY_OF--> game.
+Do not stop after the two direct Rainbow Six Siege edges. Both broader links are required.
