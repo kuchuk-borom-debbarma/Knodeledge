@@ -3,24 +3,28 @@ package dev.kuku.knodeledge.services.ai.internal;
 import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
 import dev.kuku.knodeledge.infra.topo_tracer.Traced;
 import dev.kuku.knodeledge.services.ai.AIService;
-import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
+import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.GraphPatch;
+import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.OntologyResponse;
+import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.PatchValidationResponse;
+import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.SemanticExtraction;
 import dev.kuku.knodeledge.services.context_boundary.ContextBoundaryService;
 import dev.kuku.knodeledge.services.graph.GraphService;
 import dev.kuku.topotracer.sdk.Tracer;
-import io.netty.util.internal.StringUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 /**
- * Two-call LLM workflow: normalize the note, then reconcile the complete graph.
+ * Five-call LLM workflow with deterministic graph patch validation and application.
  */
 @Service
 @RequiredArgsConstructor
@@ -28,22 +32,25 @@ public class LLMAIService implements AIService {
 
     private final Tracer tracer;
     private final ChatClient chatClient;
+    private final ObjectMapper objectMapper;
     private final ContextBoundaryService contextBoundaryService;
     private final GraphService graphService;
+    private final GraphPatchProcessor graphPatchProcessor;
 
-    @Value("classpath:/prompts/entity_context_ingest_prompt.st")
-    private Resource ingestNotePromptResource;
+    @Value("classpath:/prompts/LLM-flow/01_normalize_note.st")
+    private Resource normalizePromptResource;
 
-    @Value("classpath:/prompts/entity_context_clean_prompt.st")
-    private Resource cleanNotePromptResource;
+    @Value("classpath:/prompts/LLM-flow/02_extract_assertions.st")
+    private Resource extractAssertionsPromptResource;
 
-    private String getPrompt(Resource resource) {
-        try {
-            return resource.getContentAsString(StandardCharsets.UTF_8);
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to read prompt resource from classpath", e);
-        }
-    }
+    @Value("classpath:/prompts/LLM-flow/03_build_ontology.st")
+    private Resource buildOntologyPromptResource;
+
+    @Value("classpath:/prompts/LLM-flow/04_construct_graph_patch.st")
+    private Resource constructPatchPromptResource;
+
+    @Value("classpath:/prompts/LLM-flow/05_validate_graph_patch.st")
+    private Resource validatePatchPromptResource;
 
     @Traced(
         value = "ai.ingest-note",
@@ -52,64 +59,191 @@ public class LLMAIService implements AIService {
         maxArgumentLength = 160)
     @Override
     public void ingestNote(String note, String contextBoundaryId, String actorId) {
-        tracer.log("IngestNote " + note + " within " + contextBoundaryId + " for " + actorId);
-        if (StringUtil.isNullOrEmpty(note)) {
-            tracer.log("Note is null or empty!");
+        if (note == null || note.isBlank()) {
+            throw new IllegalArgumentException("Note must not be blank");
         }
 
-        // Retrieve context and graph in parallel
+        tracer.log("IngestNote " + note + " within " + contextBoundaryId + " for " + actorId);
+
         var parallel = tracer.parallel();
         var contextOp = CompletableFuture.supplyAsync(parallel.wrapSupplier(
             () -> contextBoundaryService.getContextBoundaryById(contextBoundaryId, actorId)));
         var graphOp = CompletableFuture.supplyAsync(parallel.wrapSupplier(
             () -> graphService.getCompleteGraphByBoundaryId(contextBoundaryId, actorId)));
-        CompletableFuture.allOf(contextOp, graphOp).join();
-        parallel.join();
         var context = contextOp.join();
-        var graph = graphOp.join();
 
-        // Stage 1: Preprocess and clean/simplify the note
-        String cleanedNote = chatClient.prompt()
-                .system(getPrompt(this.cleanNotePromptResource))
-                .user(String.format("""
-                        Subject Name: %s
-                        Subject Context: %s
-                        
-                        Raw Note:
-                        %s
-                        """, context.name(), context.context(), note))
-                .call()
-                .content();
+        String normalizedNote = chatClient.prompt()
+            .system(getPrompt(normalizePromptResource))
+            .user(String.format("""
+                Subject Name: %s
+                Subject Context: %s
 
-        tracer.log("Preprocessed Cleaned Note: \n" + cleanedNote);
-
-        // Stage 2: Reconcile the note with the existing graph and return the full graph snapshot.
-        GraphResponse response = chatClient.prompt()
-                .system(getPrompt(this.ingestNotePromptResource))
-                .user(String.format("""
-                        Context Boundary:
-                        Name: %s
-                        Description: %s
-                        
-                        Existing Graph:
-                        %s
-                        
-                        New Note:
-                        %s
-                        """, context.name(), context.context(), graph, cleanedNote))
-                .call()
-                .entity(GraphResponse.class);
-
-        if (response == null || response.nodes() == null || response.edges() == null) {
-            throw new RuntimeException("Failed to reconcile note into a complete graph");
+                Raw Note:
+                %s
+                """, context.name(), context.context(), note))
+            .call()
+            .content();
+        if (normalizedNote == null || normalizedNote.isBlank()) {
+            throw new IllegalStateException("Stage 1 returned an empty normalized note");
         }
+        tracer.log("LLM flow stage 1 normalized note");
 
-        tracer.log("Successfully reconciled note into graph", Map.of(
-                "nodesCount", String.valueOf(response.nodes().size()),
-                "edgesCount", String.valueOf(response.edges().size())
+        SemanticExtraction extraction = callEntity(
+            extractAssertionsPromptResource,
+            String.format("""
+                Context Boundary:
+                Name: %s
+                Description: %s
+
+                Normalized Facts:
+                %s
+                """, context.name(), context.context(), normalizedNote),
+            SemanticExtraction.class,
+            "extract assertions"
+        );
+        tracer.log("LLM flow stage 2 extracted assertions", Map.of(
+            "entities", String.valueOf(size(extraction.entities())),
+            "assertions", String.valueOf(size(extraction.assertions()))
         ));
 
-        graphService.saveGraph(contextBoundaryId, response.nodes(), response.edges());
-        tracer.log("Saved updated graph to database for boundary: " + contextBoundaryId);
+        var existingGraph = graphOp.join();
+        parallel.join();
+
+        OntologyResponse ontology = callEntity(
+            buildOntologyPromptResource,
+            String.format("""
+                Context Boundary:
+                Name: %s
+                Description: %s
+
+                Semantic Extraction:
+                %s
+
+                Existing Graph:
+                %s
+                """,
+                context.name(),
+                context.context(),
+                toJson(extraction),
+                toJson(existingGraph)),
+            OntologyResponse.class,
+            "build ontology"
+        );
+        tracer.log("LLM flow stage 3 built ontology", Map.of(
+            "canonicalEntities", String.valueOf(size(ontology.canonicalEntities())),
+            "nodes", String.valueOf(size(ontology.nodes())),
+            "edges", String.valueOf(size(ontology.edges()))
+        ));
+
+        GraphPatch candidatePatch = callEntity(
+            constructPatchPromptResource,
+            String.format("""
+                Context Boundary:
+                Name: %s
+                Description: %s
+
+                Existing Graph:
+                %s
+
+                Semantic Extraction:
+                %s
+
+                Resolved Ontology:
+                %s
+                """,
+                context.name(),
+                context.context(),
+                toJson(existingGraph),
+                toJson(extraction),
+                toJson(ontology)),
+            GraphPatch.class,
+            "construct graph patch"
+        );
+        tracer.log("LLM flow stage 4 constructed graph patch", patchCounts(candidatePatch));
+
+        PatchValidationResponse validation = callEntity(
+            validatePatchPromptResource,
+            String.format("""
+                Existing Graph:
+                %s
+
+                Semantic Extraction:
+                %s
+
+                Resolved Ontology:
+                %s
+
+                Candidate Patch:
+                %s
+                """,
+                toJson(existingGraph),
+                toJson(extraction),
+                toJson(ontology),
+                toJson(candidatePatch)),
+            PatchValidationResponse.class,
+            "validate graph patch"
+        );
+        if (!validation.valid() || validation.correctedPatch() == null) {
+            throw new IllegalStateException(
+                "Stage 5 rejected graph patch: " + String.join("; ", list(validation.issues()))
+            );
+        }
+        tracer.log("LLM flow stage 5 validated graph patch", Map.of(
+            "issuesRepaired", String.valueOf(size(validation.issues()))
+        ));
+
+        var finalGraph = graphPatchProcessor.apply(existingGraph, validation.correctedPatch());
+        graphService.saveGraph(contextBoundaryId, finalGraph.nodes(), finalGraph.edges());
+        tracer.log("Saved validated graph", Map.of(
+            "boundaryId", contextBoundaryId,
+            "nodes", String.valueOf(finalGraph.nodes().size()),
+            "edges", String.valueOf(finalGraph.edges().size())
+        ));
+    }
+
+    private <T> T callEntity(
+        Resource systemPrompt,
+        String userPrompt,
+        Class<T> responseType,
+        String stage
+    ) {
+        T response = chatClient.prompt()
+            .system(getPrompt(systemPrompt))
+            .user(userPrompt)
+            .call()
+            .entity(responseType);
+        if (response == null) {
+            throw new IllegalStateException("LLM flow stage failed: " + stage);
+        }
+        return response;
+    }
+
+    private Map<String, String> patchCounts(GraphPatch patch) {
+        return Map.of(
+            "upsertNodes", String.valueOf(size(patch.upsertNodes())),
+            "upsertEdges", String.valueOf(size(patch.upsertEdges())),
+            "deleteNodes", String.valueOf(size(patch.deleteNodes())),
+            "deleteEdges", String.valueOf(size(patch.deleteEdges()))
+        );
+    }
+
+    private String getPrompt(Resource resource) {
+        try {
+            return resource.getContentAsString(StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read prompt resource from classpath", e);
+        }
+    }
+
+    private String toJson(Object value) {
+        return objectMapper.writeValueAsString(value);
+    }
+
+    private int size(List<?> values) {
+        return values == null ? 0 : values.size();
+    }
+
+    private <T> List<T> list(List<T> values) {
+        return values == null ? List.of() : values;
     }
 }

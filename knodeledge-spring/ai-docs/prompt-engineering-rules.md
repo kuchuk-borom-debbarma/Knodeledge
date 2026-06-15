@@ -6,29 +6,41 @@ or modifying a prompt (`.st` file under `resources/prompts/`) must follow these 
 
 ---
 
-## 1. The Two-Stage Pipeline
+## 1. The Five-Stage Pipeline
 
-Every note goes through two sequential prompts before touching the graph.
+Every note goes through five sequential prompts before touching the graph.
 
 ```
 Raw Note
    │
    ▼
-[Stage 1: Clean Prompt]  →  Declarative facts (plain text)
+[Stage 1: Normalize]  →  Declarative facts (plain text)
    │
    ▼
-[Stage 2: Ingest Prompt]  →  Complete reconciled graph {nodes[], edges[]}
+[Stage 2: Extract]    →  Entity mentions + semantic assertions + condition trees
    │
    ▼
-Backend persists returned graph
+[Stage 3: Ontology]   →  Canonical IDs + type/genre/category hierarchy
+   │
+   ▼
+[Stage 4: Construct]  →  Graph mutation patch
+   │
+   ▼
+[Stage 5: Validate]   →  Audited and repaired graph mutation patch
+   │
+   ▼
+Backend validates and applies patch
 ```
 
-**Stage 1 (Clean)** strips noise and normalises language.
-**Stage 2 (Ingest)** extracts structured graph data.
+Each stage has exclusive authority:
 
-These stages are deliberately separate. Never merge them into one prompt.
-Merging causes the model to conflate noise filtering with structural extraction,
-producing worse results on both.
+- Stage 1 owns language normalization.
+- Stage 2 owns stated semantic meaning and boolean conditions.
+- Stage 3 owns canonical identity and reliable world ontology.
+- Stage 4 owns graph encoding and reconciliation.
+- Stage 5 owns audit and repair.
+
+Never merge stages or let one stage redo another stage's decision.
 
 ---
 
@@ -257,9 +269,11 @@ Taxonomy edges are still created when every taxonomy node is new.
 
 ---
 
-## 5. Stage 1 (Clean Prompt) Specific Rules
+## 5. Stage-Specific Rules
 
-The Stage 1 prompt's only job is producing clean declarative sentences.
+### 5.1 Normalize
+
+The normalize prompt's only job is producing clean declarative sentences.
 It must NOT attempt any graph extraction.
 
 Required rules for the clean prompt in this order:
@@ -280,13 +294,43 @@ Required rules for the clean prompt in this order:
 Without Rule 4: "makes music" becomes "likes music" → extraction produces INTERESTED_IN instead of CREATES.
 Without Rule 6: "used to live in X" loses tense → extraction produces LIVES_IN, overwriting current data.
 
+### 5.2 Extract
+
+- Use no world knowledge.
+- Preserve ASSERT vs RETRACT.
+- Preserve conditions as nested ATOM, ALL, ANY, and NOT expressions.
+- Every assertion and atomic-condition endpoint must appear in entity mentions.
+
+### 5.3 Ontology
+
+- This is the only stage allowed to use reliable general world knowledge.
+- Resolve every mention to one stable ID.
+- Reuse existing IDs and taxonomy.
+- Build traversable INSTANCE_OF, HAS_GENRE, and SUBCATEGORY_OF chains.
+- Stop at useful domain roots; avoid speculative or philosophical hierarchy.
+
+### 5.4 Construct
+
+- Consume extraction and ontology decisions without reinterpreting them.
+- Emit only upsert/delete mutations.
+- Reify conditional assertions as statement/condition subgraphs.
+- Preserve unrelated graph data.
+
+### 5.5 Validate
+
+- Check coverage, references, ontology direction, condition logic, deduplication, and provenance.
+- Repair candidate patch and return corrected patch.
+- Deterministic Java validation remains the final gate before persistence.
+
 ---
 
 ## 6. Anti-Patterns
 
 | Anti-Pattern | Consequence |
 |---|---|
-| Merging Stage 1 and Stage 2 into one prompt | Model conflates cleaning with extraction; both degrade |
+| Merging pipeline stages | Model conflates language, semantics, ontology, and graph encoding |
+| World knowledge outside ontology stage | Personal facts or taxonomy become invented inconsistently |
+| Re-resolving IDs in construct stage | Alias duplication and unstable node IDs |
 | Writing rules as domain enumerations | Breaks on any domain not in the list |
 | Closed predicate list without saying so | Model uses vague fallbacks: HAS, RELATED_TO, CONNECTED_TO |
 | Minified JSON in examples | Model produces structurally incorrect output |

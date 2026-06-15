@@ -112,6 +112,7 @@ subject + semantic predicate + object + normalized condition subgraph
 
 ## Legacy Migration
 
-During reconciliation, old `conditions` arrays and `CONDITIONED_BY` edges are converted into
-statement subgraphs. The prompt reconstructs condition predicates from source context. When the
-predicate cannot be recovered safely, it uses `REFERENCES_CONDITION` instead of inventing one.
+During stage 4 patch construction, old `conditions` arrays and `CONDITIONED_BY` edges are
+converted into statement subgraphs. Stage 5 audits the migration before Java applies it. When a
+condition predicate cannot be recovered safely, use `REFERENCES_CONDITION` instead of inventing
+one.
