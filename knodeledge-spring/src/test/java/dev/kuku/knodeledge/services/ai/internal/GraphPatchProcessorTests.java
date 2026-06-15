@@ -137,6 +137,53 @@ class GraphPatchProcessorTests {
     }
 
     @Test
+    void restoresStructuralRoleEdgeDroppedByPatchValidator() {
+        var existing = new GraphResponse(
+            List.of(node("kuku", List.of()), node("games", List.of())),
+            List.of()
+        );
+        var ontology = new OntologyResponse(
+            List.of(),
+            List.of(
+                node("statement", List.of()),
+                node("statement_1", List.of("statement"))
+            ),
+            List.of()
+        );
+        var candidate = new GraphPatch(
+            ontology.nodes(),
+            List.of(
+                edge("statement_1", "kuku", "STATEMENT_SUBJECT"),
+                edge("statement_1", "games", "LIKES")
+            ),
+            List.of(),
+            List.of()
+        );
+        var validatorPatch = new GraphPatch(
+            List.of(node("statement_1", List.of("statement"))),
+            List.of(
+                edge("statement_1", "kuku", "STATEMENT_SUBJECT"),
+                edge("statement_1", "games", "LIKES")
+            ),
+            List.of(),
+            List.of()
+        );
+
+        var completed = processor.completeReferences(
+            existing,
+            validatorPatch,
+            candidate,
+            ontology
+        );
+
+        assertTrue(completed.upsertEdges().stream().anyMatch(edge ->
+            edge.source().equals("statement_1")
+                && edge.target().equals("statement")
+                && edge.predicate().equals("GRAPH_ROLE")
+        ));
+    }
+
+    @Test
     void rejectsCategoryCacheWithoutTaxonomyEdge() {
         var patch = new GraphPatch(
             List.of(

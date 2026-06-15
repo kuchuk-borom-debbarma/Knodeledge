@@ -30,6 +30,8 @@ public class GraphPatchProcessor {
             "NOT",
             "CONDITION_SUBJECT"
         );
+    private static final Set<String> STRUCTURAL_ROLES =
+        Set.of("statement", "condition_group", "condition");
     private static final Set<String> FORBIDDEN_PREDICATES =
         Set.of(
             "SEMANTIC_PREDICATE",
@@ -101,10 +103,26 @@ public class GraphPatchProcessor {
                     availableEdges.values()
                 );
                 if (categoryEdgeKey == null) {
-                    throw new IllegalArgumentException(
-                        "No taxonomy edge available for category cache: "
-                            + nodeId + " -> " + categoryId
-                    );
+                    if (STRUCTURAL_ROLES.contains(categoryId)) {
+                        var roleEdge = new EdgeDto(
+                            nodeId,
+                            categoryId,
+                            "GRAPH_ROLE",
+                            "Structural graph role."
+                        );
+                        categoryEdgeKey = edgeKey(
+                            roleEdge.source(),
+                            roleEdge.target(),
+                            roleEdge.predicate()
+                        );
+                        completedEdges.putIfAbsent(categoryEdgeKey, roleEdge);
+                        availableEdges.putIfAbsent(categoryEdgeKey, roleEdge);
+                    } else {
+                        throw new IllegalArgumentException(
+                            "No taxonomy edge available for category cache: "
+                                + nodeId + " -> " + categoryId
+                        );
+                    }
                 }
                 EdgeDto categoryEdge = availableEdges.get(categoryEdgeKey);
                 if (categoryEdge != null) {

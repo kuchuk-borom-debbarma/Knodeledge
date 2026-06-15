@@ -39,12 +39,21 @@ AUDIT CHECKLIST
 4. Category cache:
    - Every category ID exists.
    - Every cache entry has matching INSTANCE_OF, HAS_GENRE, or GRAPH_ROLE edge.
+   - Treat each structural node as an indivisible bundle: node declaration, category cache, and
+     matching GRAPH_ROLE edge.
+   - If a statement, condition_group, or condition node has its structural category but lacks
+     GRAPH_ROLE, add the missing GRAPH_ROLE edge to correctedPatch.
+   - Never repair this mismatch by dropping the structural node, clearing its category, or
+     removing the rest of its statement subgraph.
 5. Conditional assertions:
    - No conditional assertion became a direct semantic edge.
-   - Statement has one GRAPH_ROLE, STATEMENT_SUBJECT, semantic predicate, and WHEN.
-   - Condition group uses exactly one boolean operator: ALL_OF, ANY_OF, or NOT.
+   - Every statement node has exactly one GRAPH_ROLE -> statement, one STATEMENT_SUBJECT, one
+     semantic predicate, and one WHEN.
+   - Every condition-group node has exactly one GRAPH_ROLE -> condition_group and uses exactly
+     one boolean operator: ALL_OF, ANY_OF, or NOT.
    - NOT has exactly one child.
-   - Condition has one GRAPH_ROLE, CONDITION_SUBJECT, and semantic predicate.
+   - Every condition node has exactly one GRAPH_ROLE -> condition, one CONDITION_SUBJECT, and one
+     semantic predicate.
    - Nested AND/OR/NOT meaning matches semantic extraction exactly.
    - Hypothetical condition is not stored globally.
    - Statement and condition semantic edges use actual extracted predicates.
@@ -66,3 +75,15 @@ AUDIT CHECKLIST
 9. Output:
    - correctedPatch contains only node/edge upserts and deletes.
    - No prose, markdown, confidence fields, or extra keys.
+
+FINAL STRUCTURAL AUDIT
+
+Before returning valid=true, iterate every upsertNode:
+
+- categories contains "statement" -> correctedPatch must contain source --GRAPH_ROLE--> statement
+- categories contains "condition_group" -> correctedPatch must contain
+  source --GRAPH_ROLE--> condition_group
+- categories contains "condition" -> correctedPatch must contain source --GRAPH_ROLE--> condition
+
+Also iterate structural GRAPH_ROLE edges in correctedPatch and retain their source node
+declarations. A corrected patch is invalid when either side of this node-edge bundle is missing.

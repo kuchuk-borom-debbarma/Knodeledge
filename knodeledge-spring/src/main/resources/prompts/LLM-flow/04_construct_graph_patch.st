@@ -69,7 +69,15 @@ RULES
    statement node -> ["statement"]
    group node -> ["condition_group"]
    condition node -> ["condition"]
-   Each cache value must have a matching GRAPH_ROLE edge.
+   Each structural node is an indivisible bundle:
+   - its node declaration
+   - its structural category cache
+   - its matching GRAPH_ROLE edge
+   Never emit one part without the other two. Before returning, iterate every structural node in
+   upsertNodes and verify that upsertEdges contains exactly one matching GRAPH_ROLE edge:
+   statement node --GRAPH_ROLE--> statement
+   group node --GRAPH_ROLE--> condition_group
+   condition node --GRAPH_ROLE--> condition
 11. Boolean mapping:
     - ATOM becomes one condition node.
     - ALL becomes one group with ALL_OF children.
@@ -96,3 +104,35 @@ RULES
 18. No isolated node may remain.
 19. Every semantic edge must use the exact open-vocabulary predicate supplied by extraction.
 20. No prose, markdown, confidence fields, full graph snapshot, or extra keys.
+
+STRUCTURAL BUNDLE EXAMPLE
+
+For a statement node with id statement_amelia_dislikes_coffee_when_sweet:
+
+{
+  "upsertNodes": [
+    {
+      "id": "statement",
+      "label": "Statement",
+      "categories": [],
+      "description": "Taxonomy node for statements."
+    },
+    {
+      "id": "statement_amelia_dislikes_coffee_when_sweet",
+      "label": "Statement: Amelia dislikes sweet coffee",
+      "categories": ["statement"],
+      "description": "Conditional statement that Amelia dislikes coffee when it is sweet."
+    }
+  ],
+  "upsertEdges": [
+    {
+      "source": "statement_amelia_dislikes_coffee_when_sweet",
+      "target": "statement",
+      "predicate": "GRAPH_ROLE",
+      "context": "Amelia dislikes coffee when it is sweet."
+    }
+  ]
+}
+
+The structural node is invalid if categories contains "statement" but this GRAPH_ROLE edge is
+missing. The same indivisible-bundle rule applies to condition_group and condition nodes.
