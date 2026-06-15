@@ -17,10 +17,10 @@ Raw Note
 [Stage 1: Clean Prompt]  →  Declarative facts (plain text)
    │
    ▼
-[Stage 2: Ingest Prompt]  →  JSON graph delta {nodes[], edges[]}
+[Stage 2: Ingest Prompt]  →  Complete reconciled graph {nodes[], edges[]}
    │
    ▼
-Backend merges into graph
+Backend persists returned graph
 ```
 
 **Stage 1 (Clean)** strips noise and normalises language.
@@ -102,8 +102,7 @@ within a single rule. It does not need separate rules per domain.
 If a field accepts a fixed set of values, say so explicitly and list them all.
 If a field accepts an open vocabulary, say so explicitly so the model knows to invent values.
 
-- `taxonomyType` — **closed**: `EVENT | PREFERENCE | STATE` — list every valid value.
-- `predicate`    — **open**: use the most precise verb available, invent one if none fit.
+- `predicate` — **open**: use the most precise verb available, invent one if none fit.
   State explicitly: *"the list below is non-exhaustive — invent any verb that fits."*
 
 Never leave vocabulary openness ambiguous. A list without an explicit openness statement
@@ -120,7 +119,8 @@ Required disambiguation pairs for this pipeline:
 | `PLAYS` (EVENT) | `LIKES` | Active performance: instrument, game, sport |
 | `CREATES` (EVENT) | `INTERESTED_IN` or `LIKES` | Produces output: music, art, writing, code |
 | `PREVIOUSLY_LIVED_IN` (STATE) | `LIVES_IN` | Past state, no longer current |
-| `SUBCATEGORY_OF` (STATE) | `LIKES` | Structural type relationship, not preference |
+| `INSTANCE_OF` | `SUBCATEGORY_OF` | Concrete entity to type |
+| `SUBCATEGORY_OF` | `INSTANCE_OF` | Taxonomy node to broader taxonomy node |
 
 Format in the rule: state the verb → correct choice, then the counter-example.
 ```
@@ -145,41 +145,45 @@ Convention: use the `PREVIOUSLY_` prefix.
 "formerly studied chem"    → PREVIOUSLY_STUDIED      (not STUDIES)
 ```
 
-### 3.6 Conditional Preference Handling — Dedicated Rule
+### 3.6 Conditional Fact Handling — Dedicated Rule
 
-Conditional preferences ("likes X but not when Y") must always produce two coexisting edges.
-The rule must state all five sub-points together:
+Qualified facts must be reified as statement subgraphs. Never use edge condition metadata or
+`CONDITIONED_BY` shortcuts.
 
-1. Both X and Y are extracted as separate real nodes (no composite nodes).
-2. Unconditional edge: `conditions: []`
-3. Conditional edge: `conditions: ["y_id"]`
-4. Both edges coexist — neither is dropped.
-5. `conditions: []` must always be present on every edge — never omit the field.
+Required shape:
 
-Composite nodes (`"coffee_with_sugar"`, `"ice_cream_with_dry_fruit"`) are forbidden.
-They destroy graph traversal by encoding multiple entities into a single node ID.
+```text
+statement --STATEMENT_SUBJECT--> subject
+statement --<SEMANTIC_PREDICATE>--> object
+statement --WHEN--> condition_group
+condition_group --ALL_OF|ANY_OF|NOT--> condition_or_nested_group
+condition --CONDITION_SUBJECT--> condition_subject
+condition --<CONDITION_PREDICATE>--> condition_object
+```
 
-### 3.7 Hyponym Linking (SUBCATEGORY_OF) — Dedicated Rule
+The condition relation must not become a global fact. Composite entity nodes remain forbidden.
+Unconditional direct facts and conditional statement subgraphs may coexist.
+Structural nodes use GRAPH_ROLE edges. Boolean groups may nest for mixed AND, OR, and NOT logic.
 
-When the note implies entity X is a specific instance or specialisation of broader concept Y,
-a `SUBCATEGORY_OF` STATE edge must be created: X → Y.
+### 3.7 Traversable Taxonomy — Dedicated Rule
 
-**This rule is domain-agnostic.** The trigger is the semantic relationship "X is a kind of Y",
-detected from context — not from specific keywords or domain membership.
+Categories, types, and genres are first-class nodes:
 
-The rule applies uniformly across all domains:
-- Media:       "anime like Attack on Titan" → attack_on_titan SUBCATEGORY_OF anime
-- Games:       "plays Rainbow Six Siege game" → rainbow_six_siege SUBCATEGORY_OF game
-- Professions: "programmer who likes game dev" → game_development SUBCATEGORY_OF programmer
-- Food:        "chef specialising in sushi" → sushi SUBCATEGORY_OF cuisine
-- Academia:    "studies CS, interested in ML" → machine_learning SUBCATEGORY_OF computer_science
-- Music:       "listens to jazz" (in a music context) → jazz SUBCATEGORY_OF music
+- Concrete entity to type: `INSTANCE_OF`
+- Work/product/activity to genre: `HAS_GENRE`
+- Taxonomy node to broader taxonomy node: `SUBCATEGORY_OF`
 
-The rule applies whether Y pre-exists in the graph OR is newly created in the same extraction
-batch. The condition "Y must already exist" is wrong and must never appear in this rule.
+Example:
 
-This edge is what makes specific instances reachable via general concept traversal —
-essential for chatbot queries like "what games does the actor play?".
+```text
+rainbow_six_siege --INSTANCE_OF--> video_game
+rainbow_six_siege --HAS_GENRE--> first_person_shooter
+first_person_shooter --SUBCATEGORY_OF--> game_genre
+video_game --SUBCATEGORY_OF--> game
+```
+
+`categories[]` is only a derived cache of direct `INSTANCE_OF`, `HAS_GENRE`, and GRAPH_ROLE targets.
+Every cached ID must exist as a node and matching edge. Explicit graph edges are source of truth.
 
 ### 3.8 Rule Numbering and Stability
 
@@ -207,11 +211,11 @@ Priority behaviours to cover across the 3–4 examples:
 | Priority | Behaviour |
 |---|---|
 | 1 | Active verb semantics — PLAYS/CREATES vs LIKES (most common error) |
-| 2 | Conditional preferences — coexisting LIKES + DISLIKES with conditions |
-| 3 | Existing graph merging — only new/updated nodes and edges in output |
+| 2 | Conditional preferences — statement and condition subgraph |
+| 3 | Existing graph reconciliation — unchanged facts preserved in full output |
 | 4 | Temporal or past states — PREVIOUSLY_ prefix |
 | 5 | Preference supersession — FAVORITE changes |
-| 6 | Same-batch SUBCATEGORY_OF — both X and Y are new in this batch |
+| 6 | Same-batch taxonomy nodes and edges |
 
 ### 4.3 Examples Must Use Indented JSON
 
@@ -224,12 +228,11 @@ The model learns output format by reading the examples. Minified JSON degrades t
   "source": "leo",
   "target": "guitar",
   "predicate": "PLAYS",
-  "taxonomyType": "EVENT",
-  "conditions": []
+  "context": "leo plays guitar"
 }
 
 // Bad
-{"source":"leo","target":"guitar","predicate":"PLAYS","taxonomyType":"EVENT","conditions":[]}
+{"source":"leo","target":"guitar","predicate":"PLAYS","context":"leo plays guitar"}
 ```
 
 ### 4.4 Examples Must Use Generic, Domain-Neutral Names
@@ -248,8 +251,8 @@ the principle. It closes the loop between rule and output.
 
 ```
 Note: Both "game" and "counter_strike" are NEW in this batch (Existing Graph is empty).
-SUBCATEGORY_OF is still created because Rule 5 applies to same-batch nodes too.
-"creates music" → CREATES (EVENT), not INTERESTED_IN. (Rule 4)
+Taxonomy edges are still created when every taxonomy node is new.
+"creates music" → CREATES, not INTERESTED_IN. (Rule 5)
 ```
 
 ---
@@ -288,11 +291,12 @@ Without Rule 6: "used to live in X" loses tense → extraction produces LIVES_IN
 | Closed predicate list without saying so | Model uses vague fallbacks: HAS, RELATED_TO, CONNECTED_TO |
 | Minified JSON in examples | Model produces structurally incorrect output |
 | No `Note:` on examples | Model pattern-matches, doesn't generalise |
-| `conditions` field absent on unconditional edges | Backend cannot distinguish unconditional from missing |
+| Edge condition metadata | Loses condition predicate and assertion ownership; use statement subgraph |
+| `CONDITIONED_BY` shortcut | Cannot identify which assertion the condition qualifies |
 | Composite nodes ("coffee_with_sugar") | Destroys graph traversal; entities unreachable |
-| IS_A predicate | Prevents category-based queries; use `categories[]` instead |
+| IS_A predicate | Ambiguous instance/category semantics; use INSTANCE_OF or SUBCATEGORY_OF |
 | Same predicate for current and past states | Past state silently overwrites current data |
-| "Y must exist" condition on SUBCATEGORY_OF | Specific instances unreachable when both X and Y are new |
+| Metadata-only categories | Prevents taxonomy traversal |
 | Reactive domain-specific patches | The next unseen domain breaks the same rule again |
 
 ---

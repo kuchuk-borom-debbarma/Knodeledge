@@ -25,20 +25,36 @@ RULES:
    "wrote a book" stays "wrote a book" — NOT "likes books"
 
 5. EXPLICIT CONDITIONALS
-   Split qualified preferences into two separate facts:
+   Preserve the full condition and its boolean meaning in the same fact.
+   When a sentence contains both an unconditional fact and an exception, emit both:
    "likes coffee but not with sugar" →
      "subject likes coffee."
      "subject dislikes coffee when it contains sugar."
+
+   Preserve AND, OR, and NOT exactly:
+   "likes hiking when it is sunny or cool, but not when it is raining" →
+     "subject likes hiking when the weather is sunny or cool and the weather is not raining."
+
+   Never flatten OR into AND. Never drop negation. Never split a qualified fact from the
+   condition that qualifies it.
 
 6. TEMPORAL FACTS
    Preserve tense markers so the graph can distinguish past from current states:
    "used to live in London" → "subject previously lived in London."  (not "subject lives in London")
    "moved to Berlin last year" → "subject moved to Berlin."
 
-7. DO NOT INVENT
+7. PRESERVE NEGATION AND CORRECTIONS
+   Never remove "not", "no longer", "instead", "now", "except", or similar state-changing words.
+   Resolve self-corrections to precise facts:
+   "He lives in London — sorry, Berlin now" →
+     "subject no longer lives in London."
+     "subject now lives in Berlin."
+   Do not turn "does not like X" into "likes X".
+
+8. DO NOT INVENT
    Output only facts present in the raw note. No background knowledge or inference.
 
-8. OUTPUT FORMAT
+9. OUTPUT FORMAT
    Plain text. One complete declarative sentence per line ending with a period.
    No bullet points, numbering, markdown, preamble, or closing remarks.
 
@@ -85,4 +101,3 @@ david specialises in French cuisine.
 david is allergic to shellfish.
 david likes desserts.
 david likes chocolate desserts.
-
