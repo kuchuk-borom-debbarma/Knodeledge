@@ -4,8 +4,11 @@ import dev.kuku.knodeledge.controllers.models.CreateContextBoundaryBody;
 import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
 import dev.kuku.knodeledge.infra.topo_tracer.Traced;
 import dev.kuku.knodeledge.repositories.ContextBoundaryRepository;
+import dev.kuku.knodeledge.repositories.HierarchyRepository;
 import dev.kuku.knodeledge.services.context_boundary.ContextBoundaryService;
 import dev.kuku.knodeledge.services.context_boundary.dto.ContextBoundary;
+import dev.kuku.knodeledge.services.hierarchy.internal.HierarchyFactory;
+import dev.kuku.knodeledge.services.hierarchy.internal.HierarchyProcessor;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Service;
@@ -19,6 +22,9 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class InMemoryContextBoundaryService implements ContextBoundaryService {
     private final ContextBoundaryRepository contextBoundaryRepository;
+    private final HierarchyRepository hierarchyRepository;
+    private final HierarchyFactory hierarchyFactory;
+    private final HierarchyProcessor hierarchyProcessor;
 
     @Override
     public ContextBoundary createContextBoundary(CreateContextBoundaryBody body, String userId) {
@@ -30,7 +36,10 @@ public class InMemoryContextBoundaryService implements ContextBoundaryService {
             new Date(),
             userId
         );
-        return contextBoundaryRepository.save(boundary);
+        var hierarchy = hierarchyProcessor.validate(hierarchyFactory.create(boundary));
+        ContextBoundary saved = contextBoundaryRepository.save(boundary);
+        hierarchyRepository.save(hierarchy);
+        return saved;
     }
 
     @Override

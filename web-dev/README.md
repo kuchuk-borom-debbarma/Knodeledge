@@ -1,35 +1,39 @@
 # Knodeledge Web Client
 
-React and Vite frontend for the Knodeledge knowledge-graph workspace.
+React and Vite client for the Knodeledge recursive hierarchy workspace.
 
 ## Features
 
-- user registration, login, and local session persistence
+- registration, login, and local session persistence
 - context-boundary creation and selection
 - free-form note ingestion
-- graph-grounded prompting
-- interactive node and edge visualization with `vis-network`
-- node, relationship, condition, and provenance inspection
+- hierarchy-grounded prompting
+- one-level radial hierarchy explorer
+- typed relation labels
+- child drill-down plus breadcrumb and back navigation
+- exact leaf statements and summaries
+- debug-only full hierarchy export
+
+Normal exploration requests only the current node, its immediate children, and breadcrumbs.
 
 ## Development
-
-Install dependencies and start Vite:
 
 ```bash
 npm install
 npm run dev
 ```
 
-The client calls backend endpoints through relative `/api/v1/...` URLs. Development proxy
-behavior is configured in `vite.config.js`.
+The client uses relative `/api/v1/...` URLs. Vite proxy behavior is configured in
+`vite.config.js`.
 
-## Build
+## Verification
 
 ```bash
+npm run lint
 npm run build
 ```
 
 ## Backend Documentation
 
 1. [System overview](../knodeledge-spring/docs/1.system_overview.md)
-2. [Hierarchical retrieval](../knodeledge-spring/docs/2.graph_design/2.2.hierarchical_retrieval.md)
+2. [Hierarchy architecture](../knodeledge-spring/docs/2.hierarchy_design/2.1.hierarchy_architecture.md)
