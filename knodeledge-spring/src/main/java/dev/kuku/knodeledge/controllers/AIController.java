@@ -3,6 +3,8 @@ package dev.kuku.knodeledge.controllers;
 import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
 import dev.kuku.knodeledge.infra.topo_tracer.Traced;
 import dev.kuku.knodeledge.controllers.models.IngestNoteBody;
+import dev.kuku.knodeledge.controllers.models.PromptGraphBody;
+import dev.kuku.knodeledge.controllers.models.PromptGraphResponse;
 import dev.kuku.knodeledge.services.ai.AIService;
 import dev.kuku.topotracer.sdk.Tracer;
 import lombok.RequiredArgsConstructor;
@@ -30,5 +32,17 @@ public class AIController {
         ));
         aiService.ingestNote(body.note(), body.contextBoundaryId(), body.actorId());
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/prompt")
+    @Traced(value = "aiService-controller.prompt-graph", type = KnodeledgeImportanceLevel.CONTROLLER)
+    public ResponseEntity<PromptGraphResponse> promptGraph(@RequestBody PromptGraphBody body) {
+        log.info("promptGraph endpoint hit for boundary {}", body.contextBoundaryId());
+        tracer.log("promptGraph endpoint hit", Map.of(
+            "contextBoundaryId", body.contextBoundaryId(),
+            "actorId", body.actorId()
+        ));
+        String answer = aiService.promptGraph(body.prompt(), body.contextBoundaryId(), body.actorId());
+        return ResponseEntity.ok(new PromptGraphResponse(answer));
     }
 }

@@ -8,4 +8,5 @@ public interface ContextBoundaryRepository {
     ContextBoundary save(ContextBoundary boundary);
     Optional<ContextBoundary> findById(String id);
     List<ContextBoundary> findByUserId(String userId);
+    List<ContextBoundary> findAll();
 }

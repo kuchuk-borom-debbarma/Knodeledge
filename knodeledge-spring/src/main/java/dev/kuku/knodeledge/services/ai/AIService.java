@@ -8,4 +8,6 @@ import org.springframework.stereotype.Service;
 @Service
 public interface AIService {
     void ingestNote(String note, String contextBoundaryId, String actorId);
+
+    String promptGraph(String prompt, String contextBoundaryId, String actorId);
 }

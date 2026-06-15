@@ -36,7 +36,8 @@ public class InMemoryContextBoundaryRepository implements ContextBoundaryReposit
         return results;
     }
 
-    public Map<String, ContextBoundary> getAllStoreDebug() {
-        return store;
+    @Override
+    public List<ContextBoundary> findAll() {
+        return List.copyOf(store.values());
     }
 }

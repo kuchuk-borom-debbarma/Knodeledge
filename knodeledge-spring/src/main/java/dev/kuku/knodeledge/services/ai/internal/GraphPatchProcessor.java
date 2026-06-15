@@ -162,6 +162,32 @@ public class GraphPatchProcessor {
         return response;
     }
 
+    public void validateDeletesWithinGraph(GraphPatch patch, GraphResponse graph) {
+        Set<String> nodeIds = new HashSet<>();
+        for (var node : list(graph.nodes())) {
+            nodeIds.add(node.id());
+        }
+        Set<String> edgeKeys = new HashSet<>();
+        for (var edge : list(graph.edges())) {
+            edgeKeys.add(edgeKey(edge.source(), edge.target(), edge.predicate()));
+        }
+        for (var nodeId : list(patch.deleteNodes())) {
+            if (!nodeIds.contains(nodeId)) {
+                throw new IllegalArgumentException(
+                    "Patch cannot delete node outside retrieved graph: " + nodeId
+                );
+            }
+        }
+        for (var edge : list(patch.deleteEdges())) {
+            validateEdgeRef(edge);
+            if (!edgeKeys.contains(edgeKey(edge.source(), edge.target(), edge.predicate()))) {
+                throw new IllegalArgumentException(
+                    "Patch cannot delete edge outside retrieved graph"
+                );
+            }
+        }
+    }
+
     private void validateFinalGraph(GraphResponse graph) {
         Map<String, NodeDto> nodes = new LinkedHashMap<>();
         for (var node : graph.nodes()) {

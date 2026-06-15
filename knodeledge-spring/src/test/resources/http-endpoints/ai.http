@@ -1,10 +1,19 @@
-### Ingest Raw Notes for Knowledge Graph Extraction
-POST http://localhost:8085/api/v1/aiService/
+### Ingest a note into the selected graph
+POST http://localhost:8080/api/v1/aiService/ingest
 Content-Type: application/json
 
 {
-  "notes": [
-    "I love to eat mango. Mango with a little salt tastes good.",
-    "Salt is an essential culinary ingredient."
-  ]
+  "note": "Rainbow Six Siege is a first-person shooter game.",
+  "contextBoundaryId": "<context-boundary-id>",
+  "actorId": "<actor-id>"
+}
+
+### Ask a question using the entire selected graph
+POST http://localhost:8080/api/v1/aiService/prompt
+Content-Type: application/json
+
+{
+  "prompt": "What games does this person like?",
+  "contextBoundaryId": "<context-boundary-id>",
+  "actorId": "<actor-id>"
 }

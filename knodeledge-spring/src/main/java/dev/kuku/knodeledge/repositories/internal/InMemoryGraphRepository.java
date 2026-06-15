@@ -3,12 +3,15 @@ package dev.kuku.knodeledge.repositories.internal;
 import dev.kuku.knodeledge.repositories.GraphRepository;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.NodeDto;
 import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.EdgeDto;
+import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 @Repository
 public class InMemoryGraphRepository implements GraphRepository {
@@ -35,11 +38,16 @@ public class InMemoryGraphRepository implements GraphRepository {
         return boundaryEdges.getOrDefault(contextBoundaryId, List.of());
     }
 
-    public Map<String, List<NodeDto>> getAllNodesDebug() {
-        return boundaryNodes;
-    }
-
-    public Map<String, List<EdgeDto>> getAllEdgesDebug() {
-        return boundaryEdges;
+    @Override
+    public Map<String, GraphResponse> findAllGraphs() {
+        var boundaryIds = new HashSet<>(boundaryNodes.keySet());
+        boundaryIds.addAll(boundaryEdges.keySet());
+        return boundaryIds.stream().collect(Collectors.toUnmodifiableMap(
+            boundaryId -> boundaryId,
+            boundaryId -> new GraphResponse(
+                List.copyOf(findNodesByBoundaryId(boundaryId)),
+                List.copyOf(findEdgesByBoundaryId(boundaryId))
+            )
+        ));
     }
 }

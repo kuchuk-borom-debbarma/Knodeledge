@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Network } from 'vis-network';
 import { 
   Brain, User, Plus, Send, RefreshCw, AlertCircle, 
-  LogOut, Database, Network as NetworkIcon, Eye, Info
+  LogOut, Database, Network as NetworkIcon, Eye, Info, MessageSquareText, Bug, Copy
 } from 'lucide-react';
 import './App.css';
 
@@ -26,6 +26,11 @@ function App() {
   // Graph and Ingestion State
   const [graphData, setGraphData] = useState({ nodes: [], edges: [] });
   const [noteText, setNoteText] = useState('');
+  const [workspaceMode, setWorkspaceMode] = useState('ingest');
+  const [promptText, setPromptText] = useState('');
+  const [promptAnswer, setPromptAnswer] = useState('');
+  const [debugData, setDebugData] = useState(null);
+  const [debugLoading, setDebugLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [selectedElement, setSelectedElement] = useState(null);
 
@@ -65,6 +70,7 @@ function App() {
       setBoundaries([]);
       setSelectedBoundary(null);
       setGraphData({ nodes: [], edges: [] });
+      setDebugData(null);
     }
   }, [currentUser]);
 
@@ -83,10 +89,46 @@ function App() {
     }
   };
 
+  const fetchDebugGraphs = async () => {
+    setDebugLoading(true);
+    try {
+      const res = await fetch('/api/v1/graph/debug/all');
+      if (res.ok) {
+        setDebugData(await res.json());
+      } else {
+        showStatus('error', 'Failed to load graph debug data');
+      }
+    } catch (err) {
+      showStatus('error', 'Network error while loading debug data');
+      console.error(err);
+    } finally {
+      setDebugLoading(false);
+    }
+  };
+
+  const selectWorkspaceMode = (mode) => {
+    setWorkspaceMode(mode);
+    if (mode === 'debug') {
+      fetchDebugGraphs();
+    }
+  };
+
+  const copyDebugData = async () => {
+    if (!debugData) return;
+
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(debugData, null, 2));
+      showStatus('success', 'Debug JSON copied to clipboard');
+    } catch {
+      showStatus('error', 'Failed to copy debug JSON');
+    }
+  };
+
   useEffect(() => {
     if (selectedBoundary) {
       fetchGraph();
       setSelectedElement(null);
+      setPromptAnswer('');
     }
   }, [selectedBoundary]);
 
@@ -329,6 +371,35 @@ function App() {
     }
   };
 
+  const handlePromptGraph = async (e) => {
+    e.preventDefault();
+    if (!promptText.trim() || !selectedBoundary) return;
+    setLoading(true);
+    setPromptAnswer('');
+    try {
+      const res = await fetch('/api/v1/aiService/prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: promptText,
+          contextBoundaryId: selectedBoundary.id,
+          actorId: currentUser.id
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        setPromptAnswer(data.answer);
+      } else {
+        showStatus('error', 'Failed to prompt graph');
+      }
+    } catch {
+      showStatus('error', 'Network error while prompting graph');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Register UI fallback
   if (!currentUser) {
     return (
@@ -487,46 +558,218 @@ function App() {
           )}
         </div>
 
-        {/* Note Ingestion Panel */}
+        {/* Graph Input Panel */}
         <div className="glass-panel panel-card" style={{ flex: 1, minHeight: '220px' }}>
-          <div className="panel-header">
-            <span className="panel-title">
-              <NetworkIcon size={16} color="var(--accent-purple)" />
-              Ingest Note
-            </span>
+          <div className="workspace-tabs" role="tablist" aria-label="Graph workspace mode">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={workspaceMode === 'ingest'}
+              className={workspaceMode === 'ingest' ? 'active' : ''}
+              onClick={() => selectWorkspaceMode('ingest')}
+            >
+              <NetworkIcon size={15} /> Ingest Node
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={workspaceMode === 'prompt'}
+              className={workspaceMode === 'prompt' ? 'active' : ''}
+              onClick={() => selectWorkspaceMode('prompt')}
+            >
+              <MessageSquareText size={15} /> Prompting
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={workspaceMode === 'debug'}
+              className={workspaceMode === 'debug' ? 'active' : ''}
+              onClick={() => selectWorkspaceMode('debug')}
+            >
+              <Bug size={15} /> Debug
+            </button>
           </div>
 
-          <form onSubmit={handleIngestNote} style={{ display: 'flex', flexDirection: 'column', gap: '12px', height: '100%' }}>
-            <textarea 
-              style={{ flex: 1, resize: 'none' }}
-              placeholder="Dump a free-form note here... e.g. 'Sarah loves hiking and her favorite fruit is apple'"
-              value={noteText}
-              onChange={e => setNoteText(e.target.value)}
-              disabled={!selectedBoundary || loading}
-            />
-            <button 
-              type="submit" 
-              className="primary" 
-              disabled={!selectedBoundary || !noteText.trim() || loading}
-              style={{ width: '100%' }}
-            >
-              {loading ? (
-                <>
-                  <RefreshCw className="spin" size={16} /> Processing & Restructuring...
-                </>
-              ) : (
-                <>
-                  <Send size={16} /> Submit to Graph
-                </>
+          {workspaceMode === 'ingest' ? (
+            <form onSubmit={handleIngestNote} className="workspace-form animate-fade-in">
+              <textarea
+                style={{ flex: 1, resize: 'none' }}
+                placeholder="Dump a free-form note here... e.g. 'Sarah loves hiking and her favorite fruit is apple'"
+                value={noteText}
+                onChange={e => setNoteText(e.target.value)}
+                disabled={!selectedBoundary || loading}
+              />
+              <button
+                type="submit"
+                className="primary"
+                disabled={!selectedBoundary || !noteText.trim() || loading}
+                style={{ width: '100%' }}
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="spin" size={16} /> Processing & Restructuring...
+                  </>
+                ) : (
+                  <>
+                    <Send size={16} /> Submit to Graph
+                  </>
+                )}
+              </button>
+            </form>
+          ) : workspaceMode === 'prompt' ? (
+            <form onSubmit={handlePromptGraph} className="workspace-form animate-fade-in">
+              <textarea
+                className="prompt-input"
+                placeholder="Ask this graph... e.g. 'Which games does k like and why?'"
+                value={promptText}
+                onChange={e => setPromptText(e.target.value)}
+                disabled={!selectedBoundary || loading}
+              />
+              {promptAnswer && (
+                <div className="prompt-answer">
+                  <span>Graph Answer</span>
+                  <p>{promptAnswer}</p>
+                </div>
               )}
-            </button>
-          </form>
+              <button
+                type="submit"
+                className="primary"
+                disabled={!selectedBoundary || !promptText.trim() || loading}
+                style={{ width: '100%' }}
+              >
+                {loading ? (
+                  <>
+                    <RefreshCw className="spin" size={16} /> Thinking...
+                  </>
+                ) : (
+                  <>
+                    <MessageSquareText size={16} /> Ask Graph
+                  </>
+                )}
+              </button>
+            </form>
+          ) : (
+            <div className="workspace-form debug-sidebar animate-fade-in">
+              <p>
+                Inspect every graph currently stored by the backend, grouped by context boundary.
+              </p>
+              {debugData && (
+                <div className="debug-summary">
+                  <div><strong>{debugData.boundaryCount}</strong><span>Boundaries</span></div>
+                  <div><strong>{debugData.totalNodes}</strong><span>Nodes</span></div>
+                  <div><strong>{debugData.totalEdges}</strong><span>Edges</span></div>
+                </div>
+              )}
+              <button
+                type="button"
+                className="primary"
+                onClick={fetchDebugGraphs}
+                disabled={debugLoading}
+                style={{ width: '100%', marginTop: 'auto' }}
+              >
+                <RefreshCw className={debugLoading ? 'spin' : ''} size={16} />
+                {debugLoading ? 'Loading All Graphs...' : 'Refresh Debug Data'}
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
       {/* Main Canvas Workspace */}
       <main className="canvas-container">
-        {graphData.nodes.length === 0 ? (
+        {workspaceMode === 'debug' ? (
+          <div className="debug-workspace">
+            <div className="debug-workspace-header">
+              <div>
+                <span className="debug-eyebrow">Backend Snapshot</span>
+                <h2>All Stored Graphs</h2>
+              </div>
+              <div className="debug-header-actions">
+                <button
+                  className="secondary"
+                  onClick={copyDebugData}
+                  disabled={!debugData}
+                >
+                  <Copy size={16} />
+                  Copy JSON
+                </button>
+                <button className="secondary" onClick={fetchDebugGraphs} disabled={debugLoading}>
+                  <RefreshCw className={debugLoading ? 'spin' : ''} size={16} />
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {debugLoading && !debugData ? (
+              <div className="debug-empty">Loading complete graph store...</div>
+            ) : !debugData || debugData.graphs.length === 0 ? (
+              <div className="debug-empty">No context boundaries or graph data found.</div>
+            ) : (
+              <div className="debug-content">
+                {debugData.graphs.map(graph => (
+                  <section className="debug-boundary-card glass-panel" key={graph.contextBoundaryId}>
+                    <div className="debug-boundary-header">
+                      <div>
+                        <h3>{graph.name}</h3>
+                        <code>{graph.contextBoundaryId}</code>
+                        <p>{graph.context}</p>
+                      </div>
+                      <div className="debug-boundary-counts">
+                        <span>{graph.nodes.length} nodes</span>
+                        <span>{graph.edges.length} edges</span>
+                      </div>
+                    </div>
+
+                    <div className="debug-tables">
+                      <div className="debug-table-wrap">
+                        <h4>Nodes</h4>
+                        <table>
+                          <thead>
+                            <tr><th>Label</th><th>Categories</th><th>ID</th></tr>
+                          </thead>
+                          <tbody>
+                            {graph.nodes.map(node => (
+                              <tr key={node.id}>
+                                <td>{node.label}</td>
+                                <td>{(node.categories || []).join(', ') || '-'}</td>
+                                <td><code>{node.id}</code></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {graph.nodes.length === 0 && <div className="debug-table-empty">No nodes</div>}
+                      </div>
+
+                      <div className="debug-table-wrap">
+                        <h4>Edges</h4>
+                        <table>
+                          <thead>
+                            <tr><th>Source</th><th>Predicate</th><th>Target</th></tr>
+                          </thead>
+                          <tbody>
+                            {graph.edges.map((edge, index) => (
+                              <tr key={`${edge.source}-${edge.predicate}-${edge.target}-${index}`}>
+                                <td><code>{edge.source}</code></td>
+                                <td>{edge.predicate}</td>
+                                <td><code>{edge.target}</code></td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        {graph.edges.length === 0 && <div className="debug-table-empty">No edges</div>}
+                      </div>
+                    </div>
+                  </section>
+                ))}
+
+                <details className="debug-raw glass-panel">
+                  <summary>Raw JSON response</summary>
+                  <pre>{JSON.stringify(debugData, null, 2)}</pre>
+                </details>
+              </div>
+            )}
+          </div>
+        ) : graphData.nodes.length === 0 ? (
           <div className="empty-state">
             <Brain size={64} color="var(--text-muted)" style={{ opacity: 0.3 }} />
             <h3>No Graph Data</h3>

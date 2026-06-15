@@ -206,6 +206,55 @@ class GraphPatchProcessorTests {
         assertEquals("typescript", result.edges().getFirst().target());
     }
 
+    @Test
+    void localPatchPreservesUnrelatedCanonicalGraph() {
+        var fullGraph = new GraphResponse(
+            List.of(
+                node("kuku", List.of()),
+                node("r6s", List.of()),
+                node("attack_on_titan", List.of())
+            ),
+            List.of(
+                edge("kuku", "r6s", "PLAYS"),
+                edge("kuku", "attack_on_titan", "WATCHES")
+            )
+        );
+        var localPatch = new GraphPatch(
+            List.of(node("valorant", List.of())),
+            List.of(edge("kuku", "valorant", "PLAYS")),
+            List.of(),
+            List.of()
+        );
+
+        var result = processor.apply(fullGraph, localPatch);
+
+        assertTrue(result.nodes().stream().anyMatch(node -> node.id().equals("attack_on_titan")));
+        assertTrue(result.edges().stream().anyMatch(
+            edge -> edge.target().equals("attack_on_titan")
+        ));
+    }
+
+    @Test
+    void rejectsDeleteOutsideRetrievedGraph() {
+        var retrieval = new GraphResponse(
+            List.of(node("kuku", List.of()), node("r6s", List.of())),
+            List.of(edge("kuku", "r6s", "PLAYS"))
+        );
+        var patch = new GraphPatch(
+            List.of(),
+            List.of(),
+            List.of("attack_on_titan"),
+            List.of()
+        );
+
+        var error = assertThrows(
+            IllegalArgumentException.class,
+            () -> processor.validateDeletesWithinGraph(patch, retrieval)
+        );
+
+        assertTrue(error.getMessage().contains("outside retrieved graph"));
+    }
+
     private NodeDto node(String id, List<String> categories) {
         return new NodeDto(id, id, categories, "Description for " + id);
     }

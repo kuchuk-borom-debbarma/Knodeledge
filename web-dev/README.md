@@ -1,16 +1,35 @@
-# React + Vite
+# Knodeledge Web Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React and Vite frontend for the Knodeledge knowledge-graph workspace.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- user registration, login, and local session persistence
+- context-boundary creation and selection
+- free-form note ingestion
+- graph-grounded prompting
+- interactive node and edge visualization with `vis-network`
+- node, relationship, condition, and provenance inspection
 
-## React Compiler
+## Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Install dependencies and start Vite:
 
-## Expanding the ESLint configuration
+```bash
+npm install
+npm run dev
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+The client calls backend endpoints through relative `/api/v1/...` URLs. Development proxy
+behavior is configured in `vite.config.js`.
+
+## Build
+
+```bash
+npm run build
+```
+
+## Backend Documentation
+
+1. [System overview](../knodeledge-spring/docs/1.system_overview.md)
+2. [Hierarchical retrieval](../knodeledge-spring/docs/2.graph_design/2.2.hierarchical_retrieval.md)

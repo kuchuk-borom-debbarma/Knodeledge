@@ -3,11 +3,14 @@ package dev.kuku.knodeledge.services.ai.internal;
 import dev.kuku.knodeledge.infra.topo_tracer.KnodeledgeImportanceLevel;
 import dev.kuku.knodeledge.infra.topo_tracer.Traced;
 import dev.kuku.knodeledge.services.ai.AIService;
+import dev.kuku.knodeledge.services.ai.internal.models.GraphDto.GraphResponse;
 import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.GraphPatch;
 import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.OntologyResponse;
 import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.PatchValidationResponse;
 import dev.kuku.knodeledge.services.ai.internal.models.LLMFlowDto.SemanticExtraction;
 import dev.kuku.knodeledge.services.context_boundary.ContextBoundaryService;
+import dev.kuku.knodeledge.services.community.CommunityService;
+import dev.kuku.knodeledge.services.community.internal.BoundaryLockManager;
 import dev.kuku.knodeledge.services.graph.GraphService;
 import dev.kuku.topotracer.sdk.Tracer;
 import lombok.RequiredArgsConstructor;
@@ -21,7 +24,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * Five-call LLM workflow with deterministic graph patch validation and application.
@@ -36,6 +38,8 @@ public class LLMAIService implements AIService {
     private final ContextBoundaryService contextBoundaryService;
     private final GraphService graphService;
     private final GraphPatchProcessor graphPatchProcessor;
+    private final CommunityService communityService;
+    private final BoundaryLockManager boundaryLockManager;
 
     @Value("classpath:/prompts/LLM-flow/01_normalize_note.st")
     private Resource normalizePromptResource;
@@ -52,6 +56,9 @@ public class LLMAIService implements AIService {
     @Value("classpath:/prompts/LLM-flow/05_validate_graph_patch.st")
     private Resource validatePatchPromptResource;
 
+    @Value("classpath:/prompts/LLM-flow/06_prompt_graph.st")
+    private Resource promptGraphResource;
+
     @Traced(
         value = "ai.ingest-note",
         type = KnodeledgeImportanceLevel.SERVICE,
@@ -62,15 +69,19 @@ public class LLMAIService implements AIService {
         if (note == null || note.isBlank()) {
             throw new IllegalArgumentException("Note must not be blank");
         }
+        boundaryLockManager.withLock(
+            contextBoundaryId,
+            () -> ingestNoteLocked(note, contextBoundaryId, actorId)
+        );
+    }
 
+    private void ingestNoteLocked(String note, String contextBoundaryId, String actorId) {
         tracer.log("IngestNote " + note + " within " + contextBoundaryId + " for " + actorId);
 
-        var parallel = tracer.parallel();
-        var contextOp = CompletableFuture.supplyAsync(parallel.wrapSupplier(
-            () -> contextBoundaryService.getContextBoundaryById(contextBoundaryId, actorId)));
-        var graphOp = CompletableFuture.supplyAsync(parallel.wrapSupplier(
-            () -> graphService.getCompleteGraphByBoundaryId(contextBoundaryId, actorId)));
-        var context = contextOp.join();
+        var context = contextBoundaryService.getContextBoundaryById(contextBoundaryId, actorId);
+        var retrievalPackage = communityService.prepare(note, contextBoundaryId, actorId);
+        var existingGraph = retrievalPackage.retrieval().graph();
+        var fullGraph = retrievalPackage.fullGraph();
 
         String normalizedNote = chatClient.prompt()
             .system(getPrompt(normalizePromptResource))
@@ -105,9 +116,6 @@ public class LLMAIService implements AIService {
             "entities", String.valueOf(size(extraction.entities())),
             "assertions", String.valueOf(size(extraction.assertions()))
         ));
-
-        var existingGraph = graphOp.join();
-        parallel.join();
 
         OntologyResponse ontology = callEntity(
             buildOntologyPromptResource,
@@ -198,13 +206,64 @@ public class LLMAIService implements AIService {
             candidatePatch,
             ontology
         );
-        var finalGraph = graphPatchProcessor.apply(existingGraph, completedPatch);
+        communityServiceDeleteGuard(completedPatch, existingGraph);
+        var finalGraph = graphPatchProcessor.apply(fullGraph, completedPatch);
+        var updatedHierarchy = communityService.prepareUpdate(
+            contextBoundaryId,
+            retrievalPackage.hierarchy(),
+            retrievalPackage.retrieval(),
+            completedPatch,
+            finalGraph
+        );
         graphService.saveGraph(contextBoundaryId, finalGraph.nodes(), finalGraph.edges());
+        communityService.saveHierarchy(contextBoundaryId, updatedHierarchy);
         tracer.log("Saved validated graph", Map.of(
             "boundaryId", contextBoundaryId,
             "nodes", String.valueOf(finalGraph.nodes().size()),
             "edges", String.valueOf(finalGraph.edges().size())
         ));
+    }
+
+    @Traced(
+        value = "ai.prompt-graph",
+        type = KnodeledgeImportanceLevel.SERVICE,
+        includeArguments = true,
+        maxArgumentLength = 160)
+    @Override
+    public String promptGraph(String prompt, String contextBoundaryId, String actorId) {
+        if (prompt == null || prompt.isBlank()) {
+            throw new IllegalArgumentException("Prompt must not be blank");
+        }
+        return boundaryLockManager.withLock(
+            contextBoundaryId,
+            () -> promptGraphLocked(prompt, contextBoundaryId, actorId)
+        );
+    }
+
+    private String promptGraphLocked(String prompt, String contextBoundaryId, String actorId) {
+        var retrieval = communityService.prepare(prompt, contextBoundaryId, actorId);
+        String answer = chatClient.prompt()
+            .system(getPrompt(promptGraphResource))
+            .user(String.format("""
+                Retrieved Knowledge Graph:
+                <graph>
+                %s
+                </graph>
+
+                User Prompt:
+                %s
+                """, toJson(retrieval.retrieval().graph()), prompt))
+            .call()
+            .content();
+
+        if (answer == null || answer.isBlank()) {
+            throw new IllegalStateException("Graph prompt returned an empty answer");
+        }
+        return answer;
+    }
+
+    private void communityServiceDeleteGuard(GraphPatch patch, GraphResponse retrievalGraph) {
+        graphPatchProcessor.validateDeletesWithinGraph(patch, retrievalGraph);
     }
 
     private <T> T callEntity(
