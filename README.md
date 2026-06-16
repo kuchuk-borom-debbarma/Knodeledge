@@ -18,6 +18,7 @@ them asynchronously, and ask questions that are answered only from saved notes w
 Start Postgres:
 
 ```bash
+cd knodeledge-spring
 docker compose up -d
 ```
 
