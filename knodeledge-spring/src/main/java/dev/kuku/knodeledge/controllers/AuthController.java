@@ -15,18 +15,24 @@ public class AuthController {
     private final AuthService authService;
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(@RequestBody RegisterRequest request) {
+    public ResponseEntity<AuthUserResponse> register(@RequestBody RegisterRequest request) {
         User user = authService.createUser(request.username(), request.password());
-        return ResponseEntity.ok(user);
+        return ResponseEntity.ok(AuthUserResponse.from(user));
     }
 
     @PostMapping("/login")
-    public ResponseEntity<String> login(@RequestBody LoginRequest request) {
+    public ResponseEntity<AuthUserResponse> login(@RequestBody LoginRequest request) {
         boolean authenticated = authService.authenticate(request.username(), request.password());
         if (authenticated) {
             User user = authService.getUserByUsername(request.username());
-            return ResponseEntity.ok(user.id()); // Returns user ID as a simple token representation
+            return ResponseEntity.ok(AuthUserResponse.from(user));
         }
-        return ResponseEntity.status(401).body("Invalid credentials");
+        return ResponseEntity.status(401).build();
+    }
+
+    public record AuthUserResponse(String id, String username, String token) {
+        static AuthUserResponse from(User user) {
+            return new AuthUserResponse(user.id(), user.username(), user.id());
+        }
     }
 }

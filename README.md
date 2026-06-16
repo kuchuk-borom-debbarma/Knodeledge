@@ -1,22 +1,25 @@
 # Knodeledge
 
-Knodeledge is an AI-powered workspace that turns raw notes into a recursive knowledge hierarchy.
-Each workspace starts with one subject root, organizes knowledge into progressively detailed topic
-levels, preserves exact facts and conditions, and supports hierarchy-grounded questions.
+Knodeledge is a personal knowledge base RAG app. Paste raw notes, let the backend index
+them asynchronously, and ask questions that are answered only from saved notes with citations.
 
 ## Core Features
 
-- bounded subject workspaces
-- AI extraction of atomic facts and conditions
-- top-down hierarchy routing without full-context loading
-- typed parent-child relations
-- synchronized multi-topic fact placements
-- continuous local branch rebalancing
-- radial drill-down explorer
-- hierarchy-grounded prompting
-- exact in-memory prompt-response cache
+- raw unstructured notes
+- async chunking and indexing
+- dense retrieval with pgvector
+- sparse retrieval with Postgres full-text search
+- hybrid merge and reranking
+- cited answers with not-enough-info behavior
+- strict user-scoped note and chunk access
 
 ## Development
+
+Start Postgres:
+
+```bash
+docker compose up -d
+```
 
 Backend:
 
@@ -37,5 +40,6 @@ npm run dev
 ## Documentation
 
 1. [System overview](knodeledge-spring/docs/1.system_overview.md)
-2. [Hierarchy architecture](knodeledge-spring/docs/2.hierarchy_design/2.1.hierarchy_architecture.md)
-3. [Prompt engineering rules](knodeledge-spring/docs/3.ai_pipeline/3.1.prompt_engineering_rules.md)
+2. [RAG architecture](knodeledge-spring/docs/2.rag_architecture.md)
+3. [Chunking and indexing](knodeledge-spring/docs/3.ingestion/3.1.chunking_and_indexing.md)
+4. [API reference](knodeledge-spring/docs/4.api_reference.md)

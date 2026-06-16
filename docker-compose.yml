@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    container_name: knodeledge-postgres
+    environment:
+      POSTGRES_DB: knodeledge
+      POSTGRES_USER: knodeledge
+      POSTGRES_PASSWORD: knodeledge
+    ports:
+      - "5432:5432"
+    volumes:
+      - knodeledge-postgres:/var/lib/postgresql/data
+
+volumes:
+  knodeledge-postgres:
