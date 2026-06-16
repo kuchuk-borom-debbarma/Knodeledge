@@ -1,5 +1,6 @@
 package dev.kuku.knodeledge.controllers;
 
+import dev.kuku.knodeledge.controllers.helpers.CurrentUser;
 import dev.kuku.knodeledge.controllers.models.ChatRequest;
 import dev.kuku.knodeledge.controllers.models.ChatResponse;
 import dev.kuku.knodeledge.services.auth.dto.User;

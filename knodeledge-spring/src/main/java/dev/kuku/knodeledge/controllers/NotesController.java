@@ -1,5 +1,6 @@
 package dev.kuku.knodeledge.controllers;
 
+import dev.kuku.knodeledge.controllers.helpers.CurrentUser;
 import dev.kuku.knodeledge.controllers.models.CreateNoteRequest;
 import dev.kuku.knodeledge.controllers.models.NoteResponse;
 import dev.kuku.knodeledge.controllers.models.UpdateNoteRequest;

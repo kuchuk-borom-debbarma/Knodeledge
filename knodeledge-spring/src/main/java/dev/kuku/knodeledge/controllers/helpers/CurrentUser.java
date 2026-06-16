@@ -1,4 +1,4 @@
-package dev.kuku.knodeledge.controllers;
+package dev.kuku.knodeledge.controllers.helpers;
 
 import dev.kuku.knodeledge.services.auth.AuthService;
 import dev.kuku.knodeledge.services.auth.dto.User;
